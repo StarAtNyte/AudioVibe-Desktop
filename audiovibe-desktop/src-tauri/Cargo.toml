@@ -1,0 +1,59 @@
+[package]
+name = "audiovibe-desktop"
+version = "0.1.0"
+description = "AudioVibe - AI-Powered Audiobook Player"
+authors = ["AudioVibe Team"]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/audiovibe/audiovibe-desktop"
+keywords = ["audiobook", "tauri", "audio", "ai", "desktop"]
+categories = ["multimedia", "gui"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "audiovibe_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+reqwest = { version = "0.12", features = ["json", "stream"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full", "sync"] }
+anyhow = "1.0"
+thiserror = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["v4", "serde"] }
+log = "0.4"
+env_logger = "0.11"
+tempfile = "3.8"
+lazy_static = "1.4"
+crossbeam-channel = "0.5"
+zip = "2.1"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
+dirs = "5.0"
+md5 = "0.7"
+base64 = "0.22"
+
+# Database dependencies
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "migrate"] }
+
+# Audio dependencies
+rodio = { version = "0.19", features = ["symphonia"] }
+symphonia = { version = "0.5", features = ["mp3", "flac", "vorbis", "aac", "wav"] }
+
+# Document processing dependencies
+pdf-extract = "0.7"
+epub = "2.0"
+regex = "1.0"
+

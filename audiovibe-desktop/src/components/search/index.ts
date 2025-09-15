@@ -1,0 +1,1 @@
+export { SpotifySearch } from './SpotifySearch';
