@@ -864,13 +864,18 @@ async fn get_audiobook_chapters(
     let repo = ChapterRepository::new(&pool);
     let chapters = repo.find_by_audiobook_id(&audiobook_id).await.map_err(|e| e.to_string())?;
     
-    // If no chapters found, check if this is a TTS audiobook and try to create chapters from existing files
+    // If no chapters found, try to create them automatically
     if chapters.is_empty() {
         let audiobook_repo = AudiobookRepository::new(&pool);
         if let Ok(Some(audiobook)) = audiobook_repo.find_by_id(&audiobook_id).await {
             // Check if this looks like a TTS audiobook (has description mentioning TTS)
             if audiobook.description.as_deref().unwrap_or("").contains("Text-to-Speech") {
+                println!("🔧 TTS: Auto-creating chapters for TTS audiobook: {}", audiobook.title);
                 return create_chapters_for_existing_tts_audiobook(&pool, &audiobook).await;
+            } else {
+                // Try to create chapters for LibriVox/regular audiobooks
+                println!("🔧 LIBRIVOX: Auto-creating chapters for LibriVox audiobook: {}", audiobook.title);
+                return create_chapters_for_librivox_audiobook(&pool, &audiobook).await;
             }
         }
     }
@@ -940,6 +945,94 @@ async fn create_chapters_for_existing_tts_audiobook(
         }
     }
     
+    Ok(created_chapters)
+}
+
+async fn create_chapters_for_librivox_audiobook(
+    pool: &sqlx::SqlitePool,
+    audiobook: &Audiobook,
+) -> Result<Vec<Chapter>, String> {
+    println!("🔧 LIBRIVOX: Creating missing chapters for LibriVox audiobook: {}", audiobook.title);
+    
+    let audio_dir = std::path::Path::new(&audiobook.file_path);
+    if !audio_dir.exists() {
+        return Ok(Vec::new());
+    }
+    
+    // Scan for audio files in the directory (each file = one chapter)
+    let mut audio_files = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(audio_dir) {
+        for entry in entries.flatten() {
+            if let Some(file_name) = entry.file_name().to_str() {
+                let lower_name = file_name.to_lowercase();
+                if lower_name.ends_with(".mp3") || lower_name.ends_with(".wav") || 
+                   lower_name.ends_with(".m4a") || lower_name.ends_with(".ogg") {
+                    audio_files.push((file_name.to_string(), entry.path()));
+                }
+            }
+        }
+    }
+    
+    if audio_files.is_empty() {
+        return Ok(Vec::new());
+    }
+    
+    // Sort files naturally (handles numbers properly)
+    audio_files.sort_by(|a, b| {
+        // Extract numbers from filename for proper sorting
+        let extract_number = |s: &str| -> i32 {
+            s.chars()
+                .filter(|c| c.is_digit(10))
+                .collect::<String>()
+                .parse::<i32>()
+                .unwrap_or(0)
+        };
+        
+        let num_a = extract_number(&a.0);
+        let num_b = extract_number(&b.0);
+        
+        if num_a != num_b {
+            num_a.cmp(&num_b)
+        } else {
+            a.0.cmp(&b.0) // fallback to alphabetical
+        }
+    });
+    
+    let chapter_repo = ChapterRepository::new(pool);
+    let mut created_chapters = Vec::new();
+    
+    for (index, (file_name, file_path)) in audio_files.iter().enumerate() {
+        // Create a nice chapter title from filename
+        let chapter_title = if file_name.to_lowercase().contains("chapter") {
+            // Remove file extension and clean up
+            file_name.rsplit('.').skip(1).collect::<Vec<_>>().join(".")
+                .replace("_", " ")
+                .replace("-", " ")
+        } else {
+            format!("Chapter {}", index + 1)
+        };
+        
+        let chapter_dto = CreateChapterDto {
+            audiobook_id: audiobook.id.clone(),
+            chapter_number: (index + 1) as i32,
+            title: chapter_title,
+            file_path: file_path.to_string_lossy().to_string(),
+            duration: None,
+            file_size: None,
+        };
+        
+        match chapter_repo.create(chapter_dto).await {
+            Ok(chapter) => {
+                println!("✅ LIBRIVOX: Created chapter: {} -> {}", index + 1, file_name);
+                created_chapters.push(chapter);
+            }
+            Err(e) => {
+                println!("❌ LIBRIVOX: Failed to create chapter {}: {}", index + 1, e);
+            }
+        }
+    }
+    
+    println!("🎉 LIBRIVOX: Created {} chapters for {}", created_chapters.len(), audiobook.title);
     Ok(created_chapters)
 }
 

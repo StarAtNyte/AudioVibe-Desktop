@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { Audiobook, Collection, CreateAudiobookDto, CreateCollectionDto } from '../types';
+import { useAudioStore } from './audio';
 
 interface LibraryState {
   // Data
@@ -185,6 +186,19 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       setLoading(true);
       setError(null);
+      
+      // Check if the audiobook being deleted is currently playing
+      const audioState = useAudioStore.getState();
+      const isCurrentlyPlaying = audioState.currentAudiobookId === id;
+      
+      if (isCurrentlyPlaying) {
+        console.log('🛑 Stopping playback of audiobook being deleted:', id);
+        await audioState.stop();
+        audioState.setCurrentAudiobookId(null);
+        audioState.setAudioInfo(null);
+        audioState.setChapters([]);
+        audioState.setPlayerVisible(false);
+      }
       
       const tauriCore = await import('@tauri-apps/api/core');
       await tauriCore.invoke('delete_audiobook', { id });

@@ -18,20 +18,7 @@ export const Home: React.FC = () => {
 
   // Load audiobooks when component mounts
   useEffect(() => {
-    const initializeLibrary = async () => {
-      // First clean up any sample books that were previously added
-      try {
-        const { cleanupSampleLibrary } = await import('../utils/cleanupLibrary');
-        await cleanupSampleLibrary();
-      } catch (error) {
-        console.log('Could not cleanup sample library:', error);
-      }
-      
-      // Then fetch all audiobooks
-      await fetchAudiobooks();
-    };
-    
-    initializeLibrary();
+    fetchAudiobooks();
   }, [fetchAudiobooks]);
   
   // Track download progress for books being added
