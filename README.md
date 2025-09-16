@@ -1,6 +1,8 @@
 # AudioVibe Desktop
 <img width="1918" height="1017" alt="Screenshot 2025-09-15 233936" src="https://github.com/user-attachments/assets/9e335228-737f-41d4-a8ca-289d0d7527be" />
 
+https://youtu.be/f0MmAFeqGqI
+
 AudioVibe is a cross-platform desktop application for playing and managing audiobooks. Built with Rust and Tauri for optimal performance, it provides a modern interface for organizing audiobook libraries and playing content from local files and online sources.
 
 > **Built with (Kiro)** - This project showcases advanced AI-assisted development using Kiro's code generation capabilities for building a complete desktop application from scratch.
