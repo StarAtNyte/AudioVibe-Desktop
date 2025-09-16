@@ -54,11 +54,11 @@ export const LibriVoxBrowser: React.FC<LibriVoxBrowserProps> = ({
     let archiveId = '';
     
     // Check if audiobook has archive_id field
-    if (audiobook.archive_id) {
-      archiveId = audiobook.archive_id;
-    } else if (audiobook.download_links?.zip) {
+    if ((audiobook as any).archive_id) {
+      archiveId = (audiobook as any).archive_id;
+    } else if ((audiobook.download_links as any)?.zip) {
       // Extract from zip download link: https://archive.org/download/IDENTIFIER/...
-      const zipMatch = audiobook.download_links.zip.match(/archive\.org\/download\/([^\/]+)/);
+      const zipMatch = (audiobook.download_links as any).zip.match(/archive\.org\/download\/([^\/]+)/);
       if (zipMatch) {
         archiveId = zipMatch[1];
       }
@@ -300,7 +300,6 @@ export const LibriVoxBrowser: React.FC<LibriVoxBrowserProps> = ({
                     <div className="w-24 h-32">
                       <BookCover
                         title={audiobook.title}
-                        author={audiobook.author}
                         coverUrl={getLibriVoxThumbnailUrl(audiobook)}
                         className="w-full h-full object-cover rounded"
                       />

@@ -85,7 +85,7 @@ const RealtimeTTSPlayer: React.FC<RealtimeTTSPlayerProps> = ({
 
         // Generate audio for this batch
         const startTime = performance.now();
-        const audioResponse = await ttsService.generateAudio(batchText, selectedVoice);
+        const audioResponse = await ttsService.generateAudio({ text: batchText });
         const generationTime = (performance.now() - startTime) / 1000;
 
         // Convert base64 to blob

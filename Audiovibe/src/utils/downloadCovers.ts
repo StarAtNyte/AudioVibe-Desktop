@@ -1,15 +1,15 @@
 // Utility to download and cache cover images locally
-import { getAllLocalBooks } from '../data/localBooks';
+import { localBooksDatabase } from '../data/localBooks';
 
 export const downloadAllCovers = async (): Promise<void> => {
-  const books = getAllLocalBooks();
+  const books = localBooksDatabase;
   
   for (const book of books) {
     try {
       console.log(`Downloading cover for: ${book.title}`);
       
       // Fetch the image
-      const response = await fetch(book.cover_image_url);
+      const response = await fetch((book as any).cover_image_path || '');
       if (!response.ok) {
         console.warn(`Failed to download cover for ${book.title}: ${response.statusText}`);
         continue;
@@ -41,10 +41,10 @@ export const getCachedCover = (bookId: string): string | null => {
 
 export const preloadCovers = (): void => {
   // Check if covers are already cached
-  const books = getAllLocalBooks();
+  const books = localBooksDatabase;
   let cachedCount = 0;
   
-  books.forEach(book => {
+  books.forEach((book: any) => {
     if (getCachedCover(book.id)) {
       cachedCount++;
     }

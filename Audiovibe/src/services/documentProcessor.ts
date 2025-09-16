@@ -97,7 +97,7 @@ File size: ${(file.size / 1024).toFixed(1)} KB`,
       const chapters: DocumentChapter[] = [];
       
       // Get spine items (chapters)
-      const spine = book.spine.spineItems;
+      const spine = (book.spine as any).spineItems;
       
       for (let i = 0; i < spine.length; i++) {
         const spineItem = spine[i];

@@ -41,18 +41,35 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
   const [isExpanded, setIsExpanded] = useState(!isCollapsed);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { getStatus, startProgressUpdates, chapters: storeChapters, loadChaptersForAudiobook } = useAudioStore();
+  const { getStatus, startProgressUpdates, chapters: storeChapters, loadChaptersForAudiobook, status } = useAudioStore();
   
   // Convert store chapters to ChapterWithProgress format
-  const chapters: ChapterWithProgress[] = storeChapters.map(chapter => ({
-    id: chapter.id,
-    title: chapter.title || `Chapter ${chapter.chapter_number}`,
-    startTime: 0, // File-based chapters always start at 0
-    endTime: chapter.duration || 0,
-    duration: chapter.duration || 0,
-    file_path: chapter.file_path,
-    chapter_number: chapter.chapter_number,
-  }));
+  const chapters: ChapterWithProgress[] = storeChapters.map(chapter => {
+    // For the current chapter, use the actual playing duration from status
+    // For other chapters, use database duration or 0
+    const isCurrentChapter = chapter.id === currentChapterId;
+    const actualDuration = isCurrentChapter && status.duration ? status.duration : (chapter.duration || 0);
+    
+    console.log('Chapter data:', {
+      id: chapter.id,
+      title: chapter.title,
+      duration: actualDuration,
+      isCurrentChapter,
+      statusDuration: status.duration,
+      dbDuration: chapter.duration,
+      chapter_number: chapter.chapter_number
+    });
+    
+    return {
+      id: chapter.id,
+      title: chapter.title || `Chapter ${chapter.chapter_number}`,
+      startTime: 0, // File-based chapters always start at 0
+      endTime: actualDuration,
+      duration: actualDuration,
+      file_path: chapter.file_path,
+      chapter_number: chapter.chapter_number,
+    };
+  });
   
   // Add the missing refreshChapters function using store
   const refreshChapters = async () => {
@@ -74,9 +91,24 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
       audiobookId,
       currentChapterId,
       isPlaying,
-      chaptersLoaded: chapters.length
+      chaptersLoaded: chapters.length,
+      statusDuration: status.duration,
+      chapters: chapters.map(ch => ({ id: ch.id, title: ch.title, duration: ch.duration }))
     });
-  }, [audiobookId, currentChapterId, isPlaying, chapters.length]);
+  }, [audiobookId, currentChapterId, isPlaying, chapters.length, status.duration]);
+  
+  // Log when currentChapterId specifically changes
+  useEffect(() => {
+    if (currentChapterId) {
+      console.log('ChapterNavigation: Current chapter ID changed to:', currentChapterId);
+      const currentChapter = chapters.find(ch => ch.id === currentChapterId);
+      if (currentChapter) {
+        console.log('ChapterNavigation: Found current chapter:', currentChapter);
+      } else {
+        console.log('ChapterNavigation: Current chapter not found in chapters list');
+      }
+    }
+  }, [currentChapterId, chapters]);
 
   // Set loading state based on store chapters
   useEffect(() => {
@@ -99,7 +131,16 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const formatDuration = (seconds: number): string => {
+  const formatDuration = (seconds: number, chapterId: string): string => {
+    if (!seconds || seconds <= 0) {
+      // For the current chapter, show it's loading duration
+      if (chapterId === currentChapterId) {
+        return 'Loading...';
+      }
+      // For other chapters, show a dash to indicate we don't have the duration yet
+      return '--:--';
+    }
+    
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     
@@ -328,7 +369,7 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
                     <div className="flex items-center space-x-3 mt-0.5 text-xs text-gray-500 dark:text-gray-400">
                       <div className="flex items-center space-x-1">
                         <Clock size={10} />
-                        <span>{formatDuration(chapter.duration)}</span>
+                        <span>{formatDuration(chapter.duration, chapter.id)}</span>
                       </div>
                       {isCurrent && (
                         <span className="text-blue-600 dark:text-blue-400 font-medium">

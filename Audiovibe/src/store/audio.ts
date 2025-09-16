@@ -396,15 +396,26 @@ export const useAudioStore = create<AudioState>()(
           audiobookId: audiobookId
         });
         
+        console.log('Loaded chapters:', chapterList);
         set({ chapters: chapterList });
         
         // If no current chapter is set and we have chapters, set the first one
         const { currentChapterId } = get();
         if (chapterList.length > 0 && !currentChapterId) {
-          set({ currentChapterId: chapterList[0].id });
+          const firstChapterId = chapterList[0].id;
+          console.log('Setting first chapter as current:', firstChapterId);
+          set({ currentChapterId: firstChapterId });
+          
+          // Also play the first chapter to ensure it's loaded in the player
+          try {
+            await tauriCore.invoke('play_chapter', { chapterId: firstChapterId });
+            console.log('First chapter loaded in player successfully');
+          } catch (playError) {
+            console.error('Failed to load first chapter in player:', playError);
+          }
         }
         
-        console.log(`Loaded ${chapterList.length} chapters for audiobook`);
+        console.log(`Loaded ${chapterList.length} chapters for audiobook, current chapter: ${get().currentChapterId}`);
       } catch (error) {
         console.error('Failed to load chapters for audiobook:', error);
       }

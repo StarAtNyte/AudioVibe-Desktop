@@ -332,7 +332,7 @@ export class SearchService {
   private updateRecentSuggestions(query: string) {
     // Add query as a suggestion for future searches
     this.recentSuggestions = [
-      { type: 'title', value: query },
+      { type: 'title' as const, value: query },
       ...this.recentSuggestions.filter(s => s.value !== query)
     ].slice(0, 10);
   }

@@ -6,14 +6,15 @@ import {
   ClockIcon,
   CheckIcon
 } from '@heroicons/react/24/outline';
-import { useLibraryStore, useAudioStore } from '../store';
+import { useLibraryStore, useAudioStore, useDownloadsStore } from '../store';
 import { localBooksDatabase } from '../data/localBooks';
 import { getBookCover } from '../data/bookCovers';
-import { LocalBookService, AddBookProgress } from '../services/localBookService';
+import { searchService } from '../services/searchService';
 
 export const Home: React.FC = () => {
   const { audiobooks, fetchAudiobooks } = useLibraryStore();
   const { status, isPlayerVisible, loadAudio, setAudiobook, play, currentAudiobookId } = useAudioStore();
+  const { addDownload } = useDownloadsStore();
   const navigate = useNavigate();
 
   // Load audiobooks when component mounts
@@ -21,9 +22,7 @@ export const Home: React.FC = () => {
     fetchAudiobooks();
   }, [fetchAudiobooks]);
   
-  // Track download progress for books being added
-  const [downloadProgress, setDownloadProgress] = useState<{ [bookId: string]: AddBookProgress }>({});
-  const localBookService = LocalBookService.getInstance();
+  // No longer need download progress tracking since we use downloads tab
   
   // Create collections for recommendations from local data and user library
   const recommendations = {
@@ -45,32 +44,40 @@ export const Home: React.FC = () => {
 
   const handleAddToLibrary = async (book: any) => {
     try {
-      console.log('Adding book to library:', book.title);
+      console.log('Searching LibriVox for:', book.title, 'by', book.author);
       
-      // Clear any existing progress for this book
-      setDownloadProgress(prev => ({ ...prev, [book.id]: undefined }));
-      
-      // Start the download process with progress tracking
-      await localBookService.addBookToLibrary(book.id, (progress: AddBookProgress) => {
-        setDownloadProgress(prev => ({ ...prev, [book.id]: progress }));
+      // Search LibriVox for this book to get real download data
+      const searchResults = await searchService.searchLibriVox({
+        title: book.title,
+        author: book.author,
+        limit: 1
       });
       
-      // Refresh the library after successful addition
-      const { fetchAudiobooks } = useLibraryStore.getState();
-      await fetchAudiobooks();
+      if (searchResults.length === 0) {
+        alert(`Could not find "${book.title}" on LibriVox. Please try searching manually.`);
+        return;
+      }
       
-      // Clear progress after completion
-      setTimeout(() => {
-        setDownloadProgress(prev => ({ ...prev, [book.id]: undefined }));
-      }, 3000);
+      const librivoxBook = searchResults[0];
+      console.log('Found LibriVox book:', librivoxBook.title);
+      
+      // Add to downloads queue just like search results do
+      const downloadId = addDownload({
+        title: librivoxBook.title,
+        author: librivoxBook.author,
+        coverUrl: librivoxBook.cover_url,
+        downloadUrl: librivoxBook.download_links.mp3 || librivoxBook.download_links.m4b || '',
+        description: librivoxBook.description,
+        genre: librivoxBook.genre?.[0] || book.genre || 'Unknown',
+        runtime: librivoxBook.runtime
+      });
+      
+      // Navigate to downloads tab to show progress
+      navigate('/downloads');
       
     } catch (error) {
-      console.error('Failed to add book to library:', error);
-      
-      // Clear progress on error
-      setDownloadProgress(prev => ({ ...prev, [book.id]: undefined }));
-      
-      alert(`Failed to add "${book.title}" to library: ${error}`);
+      console.error('Failed to find book on LibriVox:', error);
+      alert(`Failed to find "${book.title}" on LibriVox: ${error}`);
     }
   };
 
@@ -121,10 +128,6 @@ export const Home: React.FC = () => {
   };
 
   const BookCard = ({ book, onAdd, onPlay }: { book: any, onAdd: () => void, onPlay: () => void }) => {
-    const progress = downloadProgress[book.id];
-    const isDownloading = progress && progress.stage !== 'completed';
-    const isCompleted = progress && progress.stage === 'completed';
-    
     // Determine the cover image source
     const coverImageSrc = book.cover_image_path || getBookCover(book.id);
     
@@ -147,36 +150,11 @@ export const Home: React.FC = () => {
             />
           </div>
           
-          {/* Progress overlay */}
-          {isDownloading && (
-            <div className="absolute inset-0 bg-black/80 rounded-md flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-2"></div>
-                <p className="text-white text-xs">{progress.message}</p>
-                {progress.progress > 0 && (
-                  <div className="w-16 h-1 bg-gray-600 rounded mt-1">
-                    <div 
-                      className="h-full bg-blue-500 rounded transition-all duration-300"
-                      style={{ width: `${progress.progress}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-          
-          {/* Success overlay */}
-          {isCompleted && (
-            <div className="absolute top-2 right-2 w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-              <CheckIcon className="w-4 h-4 text-white" />
-            </div>
-          )}
           
           {/* Spotify-style play button */}
           <button
             onClick={onPlay}
             className="absolute bottom-2 right-2 w-12 h-12 bg-green-500 rounded-full flex items-center justify-center shadow-xl opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-105 hover:bg-green-400"
-            disabled={isDownloading}
           >
             <PlayIcon className="w-5 h-5 text-black ml-0.5" />
           </button>
@@ -200,19 +178,10 @@ export const Home: React.FC = () => {
                 e.stopPropagation();
                 onAdd();
               }}
-              className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 ${
-                isDownloading ? 'bg-gray-600 cursor-not-allowed' :
-                isCompleted ? 'bg-green-600' : 
-                'bg-transparent hover:bg-gray-700'
-              }`}
-              title={isCompleted ? 'Added to Library' : 'Add to Library'}
-              disabled={isDownloading}
+              className="w-6 h-6 rounded-full flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 bg-transparent hover:bg-gray-700"
+              title="Add to Library"
             >
-              {isCompleted ? (
-                <CheckIcon className="w-3 h-3 text-white" />
-              ) : (
-                <PlusIcon className="w-3 h-3 text-gray-300 hover:text-white" />
-              )}
+              <PlusIcon className="w-3 h-3 text-gray-300 hover:text-white" />
             </button>
           </div>
         </div>

@@ -36,13 +36,13 @@ export const SleepTimer: React.FC<SleepTimerProps> = ({
   const [isFading, setIsFading] = useState(false);
   const [originalVolume, setOriginalVolume] = useState(currentVolume);
 
-  const timerRef = useRef<number>();
-  const fadeIntervalRef = useRef<number>();
+  const timerRef = useRef<number | null>(null);
+  const fadeIntervalRef = useRef<number | null>(null);
 
   // Timer countdown effect
   useEffect(() => {
     if (isTimerRunning && timeRemaining > 0) {
-      timerRef.current = setTimeout(() => {
+      timerRef.current = window.setTimeout(() => {
         setTimeRemaining(prev => {
           const newTime = prev - 1;
           
@@ -66,7 +66,9 @@ export const SleepTimer: React.FC<SleepTimerProps> = ({
     }
 
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
     };
   }, [isTimerRunning, timeRemaining, fadeOutDuration, isFading, currentVolume, onTimerComplete]);
 
@@ -76,14 +78,15 @@ export const SleepTimer: React.FC<SleepTimerProps> = ({
     const volumeDecrement = originalVolume / fadeSteps;
     let currentStep = 0;
 
-    fadeIntervalRef.current = setInterval(() => {
+    fadeIntervalRef.current = window.setInterval(() => {
       currentStep++;
       const newVolume = Math.max(0, originalVolume - (volumeDecrement * currentStep));
       onVolumeChange(newVolume);
 
       if (currentStep >= fadeSteps) {
-        if (fadeIntervalRef.current) {
+        if (fadeIntervalRef.current !== null) {
           clearInterval(fadeIntervalRef.current);
+          fadeIntervalRef.current = null;
         }
       }
     }, stepInterval);
@@ -113,8 +116,14 @@ export const SleepTimer: React.FC<SleepTimerProps> = ({
     setIsFading(false);
     
     // Clear intervals
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (fadeIntervalRef.current !== null) {
+      clearInterval(fadeIntervalRef.current);
+      fadeIntervalRef.current = null;
+    }
     
     // Restore original volume if we were fading
     if (isFading) {
@@ -129,8 +138,12 @@ export const SleepTimer: React.FC<SleepTimerProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (fadeIntervalRef.current) clearInterval(fadeIntervalRef.current);
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+      }
+      if (fadeIntervalRef.current !== null) {
+        clearInterval(fadeIntervalRef.current);
+      }
     };
   }, []);
 

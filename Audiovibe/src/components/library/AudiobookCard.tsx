@@ -145,17 +145,29 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
     }
   };
 
-  const handleDelete = async () => {
-    if (window.confirm(`Are you sure you want to delete "${title}" from your library?\n\nThis action cannot be undone.`)) {
-      try {
-        await deleteAudiobook(id);
-        setShowContextMenu(false);
-        console.log(`✅ Successfully deleted audiobook: ${title}`);
-      } catch (error) {
-        console.error('Failed to delete audiobook:', error);
-        alert(`Failed to delete "${title}". Please try again.`);
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    
+    // Close the context menu first to prevent any interference
+    setShowContextMenu(false);
+    
+    // Use setTimeout to ensure the menu is closed and events are settled
+    setTimeout(() => {
+      if (window.confirm(`Are you sure you want to delete "${title}" from your library?\n\nThis action cannot be undone.`)) {
+        try {
+          deleteAudiobook(id).then(() => {
+            console.log(`✅ Successfully deleted audiobook: ${title}`);
+          }).catch((error) => {
+            console.error('Failed to delete audiobook:', error);
+            alert(`Failed to delete "${title}". Please try again.`);
+          });
+        } catch (error) {
+          console.error('Failed to delete audiobook:', error);
+          alert(`Failed to delete "${title}". Please try again.`);
+        }
       }
-    }
+    }, 100);
   };
 
   const handleDragStart = (e: React.DragEvent) => {

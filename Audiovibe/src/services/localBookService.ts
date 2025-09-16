@@ -1,6 +1,6 @@
 // Service to handle adding local books to the library with actual downloads
 
-import { LocalBook, getBookById } from '../data/localBooks';
+import { LocalBook, getBookById, localBooksDatabase } from '../data/localBooks';
 import { getBookCover } from '../data/bookCovers';
 
 export interface AddBookProgress {
@@ -78,7 +78,7 @@ export class LocalBookService {
     try {
       // Use the download manager to get the audiobook
       // Extract the Archive.org identifier from the download URL
-      const archiveId = this.extractArchiveId(book.download_url_zip);
+      const archiveId = this.extractArchiveId((book as any).download_url_zip);
       
       // Stage 2: Downloading
       if (onProgress) {
@@ -93,7 +93,7 @@ export class LocalBookService {
       // Call the Rust backend to download the files
       const downloadResult = await invoke('download_librivox_book', {
         archiveId: archiveId,
-        zipUrl: book.download_url_zip
+        zipUrl: (book as any).download_url_zip
       });
       
       // Stage 3: Processing
@@ -178,20 +178,20 @@ export class LocalBookService {
       narrator: book.narrator,
       description: book.description,
       genre: book.genre,
-      file_path: `librivox://${book.librivox_id}`, // Virtual path for LibriVox books
+      file_path: `librivox://${(book as any).librivox_id}`, // Virtual path for LibriVox books
       cover_image_path: getBookCover(book.id),
-      duration: this.parseDuration(book.duration),
+      duration: this.parseDuration((book as any).duration),
       added_date: new Date().toISOString(),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      chapters_count: book.chapters,
-      publish_date: book.year,
+      chapters_count: (book as any).chapters,
+      publish_date: (book as any).year,
       
       // Additional metadata
-      librivox_id: book.librivox_id,
-      download_url: book.download_url_zip,
-      language: book.language,
-      rating: book.rating
+      librivox_id: (book as any).librivox_id,
+      download_url: (book as any).download_url_zip,
+      language: (book as any).language,
+      rating: (book as any).rating
     };
     
     existingBooks.push(libraryBook);
@@ -247,13 +247,11 @@ export class LocalBookService {
   
   // Get all available local books
   getAllBooks(): LocalBook[] {
-    const { getAllLocalBooks } = require('../data/localBooks');
-    return getAllLocalBooks();
+    return localBooksDatabase as LocalBook[];
   }
   
   // Get books by category
   getBooksByCategory(category: string): LocalBook[] {
-    const { getBooksByCategory } = require('../data/localBooks');
-    return getBooksByCategory(category);
+    return localBooksDatabase.filter((book: any) => book.genre?.toLowerCase() === category.toLowerCase()) as LocalBook[];
   }
 }
