@@ -25,10 +25,15 @@ import clsx from 'clsx';
 
 export const LeftSidebar: React.FC = () => {
   const navigate = useNavigate();
-  const { audiobooks } = useLibraryStore();
+  const { audiobooks, fetchAudiobooks } = useLibraryStore();
   const { currentAudiobookId, loadAudio, setAudiobook, play } = useAudioStore();
   const { setLeftSidebarOpen } = useAppStore();
   const { isMobile, isTablet, isSmallDesktop } = useResponsive();
+
+  // Load audiobooks when component mounts
+  useEffect(() => {
+    fetchAudiobooks();
+  }, [fetchAudiobooks]);
   const [sortBy, setSortBy] = useState('Recently Added');
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
@@ -48,21 +53,10 @@ export const LeftSidebar: React.FC = () => {
     };
   }, []);
   
-  // Use local books database for recommendations
-  const collections = localBooksDatabase;
-  
-  // Get recommended books from different categories
+  // Get recommended books from local database
   const getRecommendedBooks = useCallback(() => {
-    const allBooks = [
-      ...(collections.classics || []),
-      ...(collections.mystery || []),
-      ...(collections.adventure || []),
-      ...(collections.scifi || []),
-      ...(collections.poetry || [])
-    ];
-    
-    // Shuffle and take first 6
-    return allBooks
+    // Use the localBooksDatabase directly as sample recommendations
+    return localBooksDatabase
       .sort(() => 0.5 - Math.random())
       .slice(0, 6)
       .map(book => ({
@@ -70,10 +64,10 @@ export const LeftSidebar: React.FC = () => {
         title: book.title,
         author: book.author,
         genre: book.genre,
-        rating: book.rating || 4.5,
-        cover_image_url: book.cover_image_url
+        rating: 4.5,
+        cover_image_url: book.cover_image_path
       }));
-  }, [collections]);
+  }, []);
 
   const recommendedBooks = useMemo(() => getRecommendedBooks(), [getRecommendedBooks]);
   const showRecommendations = audiobooks.length < 6;

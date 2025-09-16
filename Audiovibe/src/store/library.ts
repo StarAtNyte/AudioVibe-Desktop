@@ -45,7 +45,7 @@ interface LibraryState {
 }
 
 export const useLibraryStore = create<LibraryState>((set, get) => ({
-  // Initial state
+  // Initial state - load local data immediately for development
   audiobooks: [],
   collections: [],
   selectedAudiobooks: [],
@@ -76,40 +76,62 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       setLoading(true);
       setError(null);
       
-      // Check if we're actually in Tauri environment
-      const { isTauri } = await import('@tauri-apps/api/core');
-      const isInTauri = await isTauri();
-      const hasTauriGlobal = typeof (window as any).__TAURI__ !== 'undefined';
+      let useLocalData = false;
       
-      console.log('fetchAudiobooks - isTauri():', isInTauri);
-      console.log('fetchAudiobooks - hasTauriGlobal:', hasTauriGlobal);
-      
-      if (!isInTauri && !hasTauriGlobal) {
-        console.warn('Not running in Tauri environment - using mock data');
-        set({ audiobooks: [] });
-        return;
+      try {
+        // Check if we're actually in Tauri environment
+        const { isTauri } = await import('@tauri-apps/api/core');
+        const isInTauri = await isTauri();
+        const hasTauriGlobal = typeof (window as any).__TAURI__ !== 'undefined';
+        
+        console.log('fetchAudiobooks - isTauri():', isInTauri);
+        console.log('fetchAudiobooks - hasTauriGlobal:', hasTauriGlobal);
+        
+        if (!isInTauri && !hasTauriGlobal) {
+          useLocalData = true;
+        } else {
+          // Try to call Tauri API
+          const { invoke } = await import('@tauri-apps/api/core');
+          const audiobooks = await invoke('get_all_audiobooks') as Audiobook[];
+          
+          // Debug: Log all audiobook data to see what we're getting from backend
+          console.log('📚 BACKEND DATA - Fetched audiobooks:', audiobooks.length);
+          audiobooks.forEach((book, index) => {
+            console.log(`📖 Audiobook ${index + 1}:`, {
+              id: book.id,
+              title: book.title,
+              author: book.author,
+              duration: book.duration,
+              cover_image_path: book.cover_image_path,
+              file_path: book.file_path,
+              file_size: book.file_size,
+              genre: book.genre,
+              description: book.description
+            });
+          });
+          
+          set({ audiobooks });
+          return;
+        }
+      } catch (tauriError) {
+        console.warn('Tauri API failed, falling back to local data:', tauriError);
+        useLocalData = true;
       }
       
-      const { invoke } = await import('@tauri-apps/api/core');
-      const audiobooks = await invoke('get_all_audiobooks') as Audiobook[];
-      
-      // Debug: Log all audiobook data to see what we're getting from backend
-      console.log('📚 BACKEND DATA - Fetched audiobooks:', audiobooks.length);
-      audiobooks.forEach((book, index) => {
-        console.log(`📖 Audiobook ${index + 1}:`, {
-          id: book.id,
-          title: book.title,
-          author: book.author,
-          duration: book.duration,
-          cover_image_path: book.cover_image_path,
-          file_path: book.file_path,
-          file_size: book.file_size,
-          genre: book.genre,
-          description: book.description
+      if (useLocalData) {
+        console.log('Using local mock data for audiobooks');
+        const { localBooksDatabase } = await import('../data/localBooks');
+        console.log('📚 LOCAL DATA - Loaded audiobooks:', localBooksDatabase.length);
+        localBooksDatabase.forEach((book, index) => {
+          console.log(`📖 Local Audiobook ${index + 1}:`, {
+            id: book.id,
+            title: book.title,
+            author: book.author,
+            genre: book.genre
+          });
         });
-      });
-      
-      set({ audiobooks });
+        set({ audiobooks: localBooksDatabase });
+      }
     } catch (error) {
       console.error('Failed to fetch audiobooks:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch audiobooks');
@@ -252,3 +274,5 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     set({ selectedAudiobooks: [] });
   },
 }));
+
+// Note: Store initialization removed - recommendations are now handled separately from library

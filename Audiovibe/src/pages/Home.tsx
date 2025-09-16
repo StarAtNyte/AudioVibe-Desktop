@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   PlayIcon, 
@@ -12,16 +12,47 @@ import { getBookCover } from '../data/bookCovers';
 import { LocalBookService, AddBookProgress } from '../services/localBookService';
 
 export const Home: React.FC = () => {
-  const { audiobooks } = useLibraryStore();
+  const { audiobooks, fetchAudiobooks } = useLibraryStore();
   const { status, isPlayerVisible, loadAudio, setAudiobook, play, currentAudiobookId } = useAudioStore();
   const navigate = useNavigate();
+
+  // Load audiobooks when component mounts
+  useEffect(() => {
+    const initializeLibrary = async () => {
+      // First clean up any sample books that were previously added
+      try {
+        const { cleanupSampleLibrary } = await import('../utils/cleanupLibrary');
+        await cleanupSampleLibrary();
+      } catch (error) {
+        console.log('Could not cleanup sample library:', error);
+      }
+      
+      // Then fetch all audiobooks
+      await fetchAudiobooks();
+    };
+    
+    initializeLibrary();
+  }, [fetchAudiobooks]);
   
   // Track download progress for books being added
   const [downloadProgress, setDownloadProgress] = useState<{ [bookId: string]: AddBookProgress }>({});
   const localBookService = LocalBookService.getInstance();
   
-  // Use local books database
-  const collections = localBooksDatabase;
+  // Create collections for recommendations from local data and user library
+  const recommendations = {
+    classics: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('classic') || book.genre?.toLowerCase().includes('literature') || book.genre?.toLowerCase().includes('romance')),
+    mystery: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('mystery') || book.genre?.toLowerCase().includes('detective')),
+    adventure: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('adventure') || book.genre?.toLowerCase().includes('fantasy')),
+    scifi: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('science') || book.genre?.toLowerCase().includes('horror'))
+  };
+
+  // Create collections from actual user audiobooks by genre  
+  const userCollections = {
+    classics: audiobooks.filter(book => book.genre?.toLowerCase().includes('classic') || book.genre?.toLowerCase().includes('literature')),
+    mystery: audiobooks.filter(book => book.genre?.toLowerCase().includes('mystery') || book.genre?.toLowerCase().includes('detective')),
+    adventure: audiobooks.filter(book => book.genre?.toLowerCase().includes('adventure') || book.genre?.toLowerCase().includes('fantasy')),
+    scifi: audiobooks.filter(book => book.genre?.toLowerCase().includes('science') || book.genre?.toLowerCase().includes('horror'))
+  };
 
   const recentBooks = audiobooks.slice(0, 6);
 
@@ -70,6 +101,21 @@ export const Home: React.FC = () => {
   };
 
   const handleBookClick = async (book: any) => {
+    // Check if this book is in the user's library (has a real file_path)
+    const isInLibrary = audiobooks.some(userBook => userBook.id === book.id);
+    
+    if (isInLibrary) {
+      // Book is in library, play it
+      console.log('Playing book from library:', book.title);
+      await handlePlayBook(book);
+    } else {
+      // Book is a recommendation, add to library
+      console.log('Adding recommendation to library:', book.title);
+      await handleAddToLibrary(book);
+    }
+  };
+
+  const handleRecommendationClick = async (book: any) => {
     console.log('Navigating to book:', book.title);
     try {
       // Load the audiobook (but don't play it) and set it as current
@@ -242,11 +288,11 @@ export const Home: React.FC = () => {
       
       {/* Quick Access Grid - Spotify style */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
-        {collections?.classics && collections.classics.slice(0, 6).map((book) => (
+        {audiobooks.slice(0, 6).map((book) => (
           <div
             key={`quick-${book.id}`}
             className="bg-gray-800/60 hover:bg-gray-700/70 rounded-md flex items-center group cursor-pointer transition-all duration-200 overflow-hidden"
-            onClick={() => handlePlayBook(book)}
+            onClick={() => handleBookClick(book)}
           >
             <img
               src={book.cover_image_path || getBookCover(book.id)}
@@ -263,7 +309,7 @@ export const Home: React.FC = () => {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                handlePlayBook(book);
+                handleBookClick(book);
               }}
               className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center mr-4 opacity-0 group-hover:opacity-100 transition-all duration-200 hover:scale-105"
             >
@@ -292,32 +338,32 @@ export const Home: React.FC = () => {
         />
       )}
 
-      {/* Classic Literature */}
+      {/* Classic Literature - Show user books if they have any, otherwise recommendations */}
       <Section 
         title="Classic Literature" 
-        subtitle="Timeless stories from LibriVox"
-        books={collections?.classics} 
+        subtitle={userCollections.classics.length > 0 ? "Your classic collection" : "Timeless stories from LibriVox"}
+        books={userCollections.classics.length > 0 ? userCollections.classics : recommendations.classics} 
       />
 
-      {/* Mystery & Detective */}
+      {/* Mystery & Detective - Show user books if they have any, otherwise recommendations */}
       <Section 
         title="Mystery & Detective" 
-        subtitle="Solve puzzles with the greatest detectives"
-        books={collections?.mystery} 
+        subtitle={userCollections.mystery.length > 0 ? "Your mystery collection" : "Solve puzzles with the greatest detectives"}
+        books={userCollections.mystery.length > 0 ? userCollections.mystery : recommendations.mystery} 
       />
 
-      {/* Adventure Stories */}
+      {/* Adventure Stories - Show user books if they have any, otherwise recommendations */}
       <Section 
         title="Adventure Stories" 
-        subtitle="Thrilling tales of exploration and discovery"
-        books={collections?.adventure} 
+        subtitle={userCollections.adventure.length > 0 ? "Your adventure collection" : "Thrilling tales of exploration and discovery"}
+        books={userCollections.adventure.length > 0 ? userCollections.adventure : recommendations.adventure} 
       />
 
-      {/* Science Fiction */}
+      {/* Science Fiction - Show user books if they have any, otherwise recommendations */}
       <Section 
         title="Science Fiction" 
-        subtitle="Pioneering works of speculative fiction"
-        books={collections?.scifi} 
+        subtitle={userCollections.scifi.length > 0 ? "Your sci-fi collection" : "Pioneering works of speculative fiction"}
+        books={userCollections.scifi.length > 0 ? userCollections.scifi : recommendations.scifi} 
       />
     </div>
   );
