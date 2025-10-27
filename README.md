@@ -1,15 +1,10 @@
 # AudioVibe Desktop
-<img width="1918" height="1017" alt="Screenshot 2025-09-15 233936" src="https://github.com/user-attachments/assets/9e335228-737f-41d4-a8ca-289d0d7527be" />
-
-https://youtu.be/f0MmAFeqGqI
 
 AudioVibe is a cross-platform desktop application for playing and managing audiobooks. Built with Rust and Tauri for optimal performance, it provides a modern interface for organizing audiobook libraries and playing content from local files and online sources.
 
-> **Built with (Kiro)** - This project showcases advanced AI-assisted development using Kiro's code generation capabilities for building a complete desktop application from scratch.
-
 ## 🎯 Project Overview
 
-AudioVibe Desktop is a comprehensive audiobook management and playback solution that demonstrates the power of AI-assisted development. The application was built with the help of structured conversations with, showcasing how AI can accelerate development while maintaining code quality and best practices.
+AudioVibe Desktop is a comprehensive audiobook management and playback solution featuring local library management, text-to-speech generation, and integration with free audiobook sources like LibriVox.
 
 ## Technology Stack
 
@@ -106,13 +101,13 @@ audiovibe-desktop/
 - 🌙 Basic theming support
 - 🔍 Search functionality
 
-### Built with Kiro
-This project demonstrates AI-assisted development using Kiro for:
-- Full-stack application architecture
-- Rust/Tauri backend implementation
-- React frontend development
-- Database design and integration
-- Audio engine implementation
+### Technical Implementation
+This project showcases modern desktop application development:
+- Full-stack application architecture with Rust and React
+- Cross-platform desktop application with Tauri
+- Modern React frontend with TypeScript
+- SQLite database integration with SQLx
+- Custom audio engine implementation
 
 ## 🚀 Getting Started
 
@@ -154,17 +149,19 @@ This project demonstrates AI-assisted development using Kiro for:
 - **Audio Controls**: Real-time playback controls and progress tracking
 - **Responsive Design**: Optimized for desktop usage
 
-### Development Approach
-- **Real-time debugging** and problem-solving assistance  
-- **Code generation** for complex Rust and TypeScript implementations
-- **Architecture guidance** for cross-platform desktop applications
+## 💡 Key Technical Features
 
-### Key AI Contributions
-- Audio engine implementation with Rust
-- Database schema design and SQLx integration
-- React component architecture and state management
-- Cross-platform build configuration
-- Real-time bug fixes and optimizations
+### Advanced Audio Processing
+- Multi-format audio support with efficient decoding
+- Real-time playback controls with smooth seeking
+- Chapter-based navigation and progress tracking
+- Cross-platform audio engine optimization
+
+### Database Integration
+- SQLite database with comprehensive schema design
+- Efficient metadata storage and retrieval
+- Progress tracking and bookmark management
+- Optimized queries for large audiobook collections
 
 ## 📋 Development Commands
 
@@ -188,9 +185,13 @@ This project demonstrates AI-assisted development using Kiro for:
 - Rust (latest stable)
 - Platform-specific build tools (Visual Studio on Windows, Xcode on macOS)
 
+## 📄 License
+
+This project is built for demonstration purposes showcasing modern desktop application development.
+
 ## 🎥 Demo Video
 
-A 3-minute demonstration video showcasing the AI-assisted development process and application features is available for review.
+A 3-minute demonstration video showcasing the application features and development process is available for review.
 
 ## Recommended IDE Setup
 
