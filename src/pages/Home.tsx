@@ -1,66 +1,124 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  PlayIcon, 
+import {
+  PlayIcon,
   PlusIcon,
   ClockIcon,
   CheckIcon
 } from '@heroicons/react/24/outline';
 import { useLibraryStore, useAudioStore, useDownloadsStore } from '../store';
-import { localBooksDatabase } from '../data/localBooks';
+import { useOnboardingStore } from '../store/onboarding';
 import { getBookCover } from '../data/bookCovers';
 import { searchService } from '../services/searchService';
+import { archiveService, ArchiveAudiobook } from '../services/archiveService';
+import { GenreOnboarding } from '../components/onboarding/GenreOnboarding';
 
 export const Home: React.FC = () => {
   const { audiobooks, fetchAudiobooks } = useLibraryStore();
   const { status, isPlayerVisible, loadAudio, setAudiobook, play, currentAudiobookId } = useAudioStore();
   const { addDownload } = useDownloadsStore();
+  const { hasCompletedOnboarding, selectedGenres, completeOnboarding } = useOnboardingStore();
   const navigate = useNavigate();
+
+  const [recommendedBooks, setRecommendedBooks] = useState<ArchiveAudiobook[]>([]);
+  const [popularBooks, setPopularBooks] = useState<ArchiveAudiobook[]>([]);
+  const [trendingBooks, setTrendingBooks] = useState<ArchiveAudiobook[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
 
   // Load audiobooks when component mounts
   useEffect(() => {
     fetchAudiobooks();
   }, [fetchAudiobooks]);
-  
-  // No longer need download progress tracking since we use downloads tab
-  
-  // Create collections for recommendations from local data and user library
-  const recommendations = {
-    classics: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('classic') || book.genre?.toLowerCase().includes('literature') || book.genre?.toLowerCase().includes('romance')),
-    mystery: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('mystery') || book.genre?.toLowerCase().includes('detective')),
-    adventure: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('adventure') || book.genre?.toLowerCase().includes('fantasy')),
-    scifi: localBooksDatabase.filter(book => book.genre?.toLowerCase().includes('science') || book.genre?.toLowerCase().includes('horror'))
+
+  // Load recommendations when user completes onboarding or page loads
+  useEffect(() => {
+    if (hasCompletedOnboarding) {
+      loadRecommendations();
+    }
+  }, [hasCompletedOnboarding, selectedGenres]);
+
+  const loadRecommendations = async () => {
+    setLoadingRecommendations(true);
+    try {
+      // Load different sections in parallel
+      const [recommended, popular, trending] = await Promise.all([
+        selectedGenres.length > 0
+          ? archiveService.getByGenres(selectedGenres, 15)
+          : archiveService.getPopular(15),
+        archiveService.getPopular(15),
+        archiveService.getTrending(15)
+      ]);
+
+      setRecommendedBooks(recommended);
+      setPopularBooks(popular);
+      setTrendingBooks(trending);
+    } catch (error) {
+      console.error('Failed to load recommendations:', error);
+    } finally {
+      setLoadingRecommendations(false);
+    }
   };
 
-  // Create collections from actual user audiobooks by genre  
-  const userCollections = {
-    classics: audiobooks.filter(book => book.genre?.toLowerCase().includes('classic') || book.genre?.toLowerCase().includes('literature')),
-    mystery: audiobooks.filter(book => book.genre?.toLowerCase().includes('mystery') || book.genre?.toLowerCase().includes('detective')),
-    adventure: audiobooks.filter(book => book.genre?.toLowerCase().includes('adventure') || book.genre?.toLowerCase().includes('fantasy')),
-    scifi: audiobooks.filter(book => book.genre?.toLowerCase().includes('science') || book.genre?.toLowerCase().includes('horror'))
+  const handleOnboardingComplete = (genres: string[]) => {
+    completeOnboarding(genres);
   };
+
+  // Show onboarding if not completed
+  if (!hasCompletedOnboarding) {
+    return <GenreOnboarding onComplete={handleOnboardingComplete} />;
+  }
+  
+  // No longer need download progress tracking since we use downloads tab
 
   const recentBooks = audiobooks.slice(0, 6);
 
+  const handleAddArchiveBook = async (book: ArchiveAudiobook) => {
+    try {
+      console.log('Adding Archive.org book to library:', book.title);
+
+      // Add to downloads queue
+      const downloadId = addDownload({
+        title: book.title,
+        author: book.creator || 'Unknown Author',
+        coverUrl: book.coverUrl,
+        downloadUrl: book.zipUrl || '',
+        description: book.description || `${book.title} by ${book.creator}`,
+        genre: book.subject?.[0] || 'Unknown',
+        runtime: book.runtime
+      });
+
+      // Navigate to downloads tab to show progress
+      navigate('/downloads');
+    } catch (error) {
+      console.error('Failed to add Archive.org book:', error);
+      alert(`Failed to add "${book.title}": ${error}`);
+    }
+  };
+
   const handleAddToLibrary = async (book: any) => {
     try {
+      // Check if it's an Archive.org book (has identifier field)
+      if ((book as any).identifier) {
+        return handleAddArchiveBook(book as ArchiveAudiobook);
+      }
+
       console.log('Searching LibriVox for:', book.title, 'by', book.author);
-      
+
       // Search LibriVox for this book to get real download data
       const searchResults = await searchService.searchLibriVox({
         title: book.title,
         author: book.author,
         limit: 1
       });
-      
+
       if (searchResults.length === 0) {
         alert(`Could not find "${book.title}" on LibriVox. Please try searching manually.`);
         return;
       }
-      
+
       const librivoxBook = searchResults[0];
       console.log('Found LibriVox book:', librivoxBook.title);
-      
+
       // Add to downloads queue just like search results do
       const downloadId = addDownload({
         title: librivoxBook.title,
@@ -71,10 +129,10 @@ export const Home: React.FC = () => {
         genre: librivoxBook.genre?.[0] || book.genre || 'Unknown',
         runtime: librivoxBook.runtime
       });
-      
+
       // Navigate to downloads tab to show progress
       navigate('/downloads');
-      
+
     } catch (error) {
       console.error('Failed to find book on LibriVox:', error);
       alert(`Failed to find "${book.title}" on LibriVox: ${error}`);
@@ -277,8 +335,8 @@ export const Home: React.FC = () => {
 
       {/* Your Recent Listens */}
       {recentBooks.length > 0 && (
-        <Section 
-          title="Recently played" 
+        <Section
+          title="Recently played"
           books={recentBooks.map(book => ({
             id: book.id,
             title: book.title,
@@ -294,33 +352,71 @@ export const Home: React.FC = () => {
         />
       )}
 
-      {/* Classic Literature - Show user books if they have any, otherwise recommendations */}
-      <Section 
-        title="Classic Literature" 
-        subtitle={userCollections.classics.length > 0 ? "Your classic collection" : "Timeless stories from LibriVox"}
-        books={userCollections.classics.length > 0 ? userCollections.classics : recommendations.classics} 
-      />
+      {/* Recommended for You - Based on selected genres */}
+      {selectedGenres.length > 0 && recommendedBooks.length > 0 && (
+        <Section
+          title="Recommended for You"
+          subtitle={`Based on your interests: ${selectedGenres.slice(0, 3).join(', ')}${selectedGenres.length > 3 ? '...' : ''}`}
+          books={recommendedBooks.map(book => ({
+            id: book.identifier,
+            identifier: book.identifier,
+            title: book.title,
+            author: book.creator || 'Unknown Author',
+            duration: book.runtime || 'Unknown',
+            year: book.date ? new Date(book.date).getFullYear() : 'Unknown',
+            genre: book.subject?.[0] || 'Audiobook',
+            description: book.description || 'No description available',
+            rating: book.avg_rating || 0,
+            cover_image_path: book.coverUrl,
+            zipUrl: book.zipUrl,
+            coverUrl: book.coverUrl
+          }))}
+        />
+      )}
 
-      {/* Mystery & Detective - Show user books if they have any, otherwise recommendations */}
-      <Section 
-        title="Mystery & Detective" 
-        subtitle={userCollections.mystery.length > 0 ? "Your mystery collection" : "Solve puzzles with the greatest detectives"}
-        books={userCollections.mystery.length > 0 ? userCollections.mystery : recommendations.mystery} 
-      />
+      {/* Popular All Time - From Archive.org */}
+      {popularBooks.length > 0 && (
+        <Section
+          title="Popular All Time"
+          subtitle="Most downloaded audiobooks from LibriVox"
+          books={popularBooks.map(book => ({
+            id: book.identifier,
+            identifier: book.identifier,
+            title: book.title,
+            author: book.creator || 'Unknown Author',
+            duration: book.runtime || 'Unknown',
+            year: book.date ? new Date(book.date).getFullYear() : 'Unknown',
+            genre: book.subject?.[0] || 'Audiobook',
+            description: book.description || 'No description available',
+            rating: book.avg_rating || 0,
+            cover_image_path: book.coverUrl,
+            zipUrl: book.zipUrl,
+            coverUrl: book.coverUrl
+          }))}
+        />
+      )}
 
-      {/* Adventure Stories - Show user books if they have any, otherwise recommendations */}
-      <Section 
-        title="Adventure Stories" 
-        subtitle={userCollections.adventure.length > 0 ? "Your adventure collection" : "Thrilling tales of exploration and discovery"}
-        books={userCollections.adventure.length > 0 ? userCollections.adventure : recommendations.adventure} 
-      />
-
-      {/* Science Fiction - Show user books if they have any, otherwise recommendations */}
-      <Section 
-        title="Science Fiction" 
-        subtitle={userCollections.scifi.length > 0 ? "Your sci-fi collection" : "Pioneering works of speculative fiction"}
-        books={userCollections.scifi.length > 0 ? userCollections.scifi : recommendations.scifi} 
-      />
+      {/* Trending This Week - From Archive.org */}
+      {trendingBooks.length > 0 && (
+        <Section
+          title="Trending This Week"
+          subtitle="Popular audiobooks this week"
+          books={trendingBooks.map(book => ({
+            id: book.identifier,
+            identifier: book.identifier,
+            title: book.title,
+            author: book.creator || 'Unknown Author',
+            duration: book.runtime || 'Unknown',
+            year: book.date ? new Date(book.date).getFullYear() : 'Unknown',
+            genre: book.subject?.[0] || 'Audiobook',
+            description: book.description || 'No description available',
+            rating: book.avg_rating || 0,
+            cover_image_path: book.coverUrl,
+            zipUrl: book.zipUrl,
+            coverUrl: book.coverUrl
+          }))}
+        />
+      )}
     </div>
   );
 };

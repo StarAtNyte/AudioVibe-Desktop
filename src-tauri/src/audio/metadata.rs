@@ -36,6 +36,8 @@ pub fn extract_audio_metadata<P: AsRef<Path>>(path: P) -> Result<AudioInfo> {
     let fmt_opts: FormatOptions = Default::default();
 
     // Probe the media source
+    // Note: For m4b files with large metadata, Symphonia may hit probe limits
+    // The codec features (isomp4, alac) help with proper format detection
     let probed = symphonia::default::get_probe()
         .format(&hint, mss, &fmt_opts, &meta_opts)
         .with_context(|| format!("Failed to probe audio format for: {}", path.display()))?;

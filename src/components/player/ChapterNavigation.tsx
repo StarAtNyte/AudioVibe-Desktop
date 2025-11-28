@@ -110,13 +110,35 @@ export const ChapterNavigation: React.FC<ChapterNavigationProps> = ({
     }
   }, [currentChapterId, chapters]);
 
+  // Load chapters when audiobookId changes if not already loaded
+  useEffect(() => {
+    if (audiobookId && chapters.length === 0) {
+      console.log('📚 ChapterNavigation: Triggering chapter load for:', audiobookId);
+      loadChaptersForAudiobook(audiobookId);
+    }
+  }, [audiobookId, loadChaptersForAudiobook]);
+
   // Set loading state based on store chapters
   useEffect(() => {
     if (chapters.length > 0) {
+      console.log('✅ ChapterNavigation: Chapters loaded, hiding spinner');
       setLoading(false);
       setError(null);
     } else if (audiobookId) {
+      // Don't stay in loading state forever - set a timeout
+      console.log('⏳ ChapterNavigation: Waiting for chapters to load...');
       setLoading(true);
+      const timeoutId = setTimeout(() => {
+        if (chapters.length === 0) {
+          console.warn('⚠️ Chapters taking too long to load, stopping spinner');
+          setLoading(false);
+          setError('Chapters took too long to load. Try refreshing.');
+        }
+      }, 10000); // 10 second timeout
+
+      return () => clearTimeout(timeoutId);
+    } else {
+      setLoading(false);
     }
   }, [chapters.length, audiobookId]);
 

@@ -197,71 +197,97 @@ export const Library: React.FC = () => {
   const handleAddFolder = async (folderName?: string) => {
     try {
       setShowAddModal(false); // Close modal immediately
-      
-      console.log('=== STARTING FOLDER UPLOAD ===');
+
+      console.log('=== STARTING FOLDER IMPORT ===');
       console.log('Window.__TAURI__:', typeof (window as any).__TAURI__);
-      
+
       const { isTauri } = await import('@tauri-apps/api/core');
       const isInTauri = await isTauri();
       console.log('isTauri() result:', isInTauri);
-      
+
       if (!isInTauri && typeof (window as any).__TAURI__ === 'undefined') {
         alert('This feature is only available in the desktop app');
         return;
       }
-      
+
       console.log('Opening directory picker...');
-      
+
       // Use Tauri's dialog plugin to open native directory picker
       const { open } = await import('@tauri-apps/plugin-dialog');
-      
+
       const selectedPath = await open({
         directory: true,
         multiple: false,
-        title: 'Select Audiobooks Directory'
+        title: 'Select Audiobook Folder'
       });
-      
+
       if (!selectedPath) {
         console.log('No directory selected');
         return;
       }
-      
+
       console.log('Selected directory:', selectedPath);
-      
-      // Scan the selected directory
-      console.log('Calling scan_directory with path:', selectedPath);
+
+      // Import the audiobook from directory
+      // This will:
+      // 1. Scan for audio files (mp3, m4a, m4b, flac, etc.)
+      // 2. Extract metadata from files
+      // 3. Create chapters if multiple files
+      // 4. Find cover images automatically
+      console.log('Calling import_audiobook_from_directory...');
       const { invoke } = await import('@tauri-apps/api/core');
-      const audioFiles = await invoke<any[]>('scan_directory', { 
-        directoryPath: selectedPath 
+
+      const audiobook = await invoke('import_audiobook_from_directory', {
+        directoryPath: selectedPath
       });
-      
-      console.log(`Found ${audioFiles.length} audio files:`, audioFiles);
-      
-      if (audioFiles.length === 0) {
-        alert(`No audio files found in the selected directory.\n\nPlease ensure the directory contains supported audio files:\n• MP3, M4A, AAC, FLAC, WAV, OGG`);
-        return;
+
+      console.log('Import result:', audiobook);
+
+      // Try to find and set cover image
+      try {
+        console.log('Looking for cover image...');
+        const coverPath = await invoke<string | null>('find_cover_art', {
+          directoryPath: selectedPath
+        });
+
+        if (coverPath) {
+          console.log('Found cover image:', coverPath);
+          try {
+            // Convert the cover image to base64 using Tauri command
+            const dataUrl = await invoke<string>('read_cover_image_as_base64', {
+              imagePath: coverPath
+            });
+
+            console.log('Converted cover to data URL (length:', dataUrl.length, ')');
+
+            // Update the audiobook with the cover image
+            await invoke('update_audiobook', {
+              audiobookId: (audiobook as any).id,
+              updates: {
+                cover_image_path: dataUrl
+              }
+            });
+
+            console.log('Updated audiobook with cover image');
+          } catch (coverError) {
+            console.warn('Failed to process cover image:', coverError);
+          }
+        } else {
+          console.log('No cover image found in directory');
+        }
+      } catch (coverError) {
+        console.warn('Failed to find cover image:', coverError);
       }
-      
-      // Import the found audiobooks
-      console.log('Importing audiobooks...');
-      const filePaths = audioFiles.map((file: any) => file.path);
-      console.log('File paths to import:', filePaths);
-      
-      const result = await invoke('import_audiobook_from_files', {
-        filePaths: filePaths
-      });
-      
-      console.log('Import result:', result);
-      
+
       // Refresh the library
       await fetchAudiobooks();
-      
-      alert(`Successfully imported ${audioFiles.length} audiobook(s)!`);
-      
+
+      alert(`Successfully imported audiobook: ${(audiobook as any).title}\n\nChapters: ${(audiobook as any).chapters_count || 1}`);
+
     } catch (error) {
-      console.error('Failed to import audiobooks:', error);
+      console.error('Failed to import audiobook:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      alert(`Failed to import audiobooks: ${errorMessage}`);
+      alert(`Failed to import audiobook: ${errorMessage}\n\nSupported formats: MP3, M4A, M4B, AAC, FLAC, WAV, OGG, OPUS, WMA`);
     }
   };
 

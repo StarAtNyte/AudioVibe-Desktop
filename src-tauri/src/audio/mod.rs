@@ -1,9 +1,8 @@
 // Audio engine module for AudioVibe
 // This module will handle audio playback, metadata extraction, and audio processing
 
-use rodio::{Decoder, OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{Decoder, OutputStream, Sink, Source, OutputStreamBuilder};
 use std::fs::File;
-use std::io::BufReader;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use anyhow::{Result, Context};
@@ -47,8 +46,6 @@ pub struct PlaybackStatus {
 
 pub struct AudioEngine {
     _stream: OutputStream,
-    #[allow(dead_code)]
-    stream_handle: OutputStreamHandle,
     sink: Arc<Mutex<Sink>>,
     current_file: Arc<Mutex<Option<String>>>,
     current_audio_info: Arc<Mutex<Option<AudioInfo>>>,
@@ -65,15 +62,17 @@ pub struct AudioEngine {
 
 impl AudioEngine {
     pub fn new() -> Result<Self> {
-        let (_stream, stream_handle) = OutputStream::try_default()
+        // Use the new Rodio 0.21 API
+        let mut stream = OutputStreamBuilder::open_default_stream()
             .context("Failed to create audio output stream")?;
-        
-        let sink = Sink::try_new(&stream_handle)
-            .context("Failed to create audio sink")?;
-        
+
+        // Disable logging on drop to avoid cluttering output
+        stream.log_on_drop(false);
+
+        let sink = Sink::connect_new(stream.mixer());
+
         Ok(Self {
-            _stream,
-            stream_handle,
+            _stream: stream,
             sink: Arc::new(Mutex::new(sink)),
             current_file: Arc::new(Mutex::new(None)),
             current_audio_info: Arc::new(Mutex::new(None)),
@@ -92,13 +91,13 @@ impl AudioEngine {
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
         println!("🔧 ENGINE: Starting load_file for: {}", path.display());
-        
+
         // Forcefully stop and drain all audio from the sink
         {
             let sink = self.sink.lock().unwrap();
             println!("🔧 ENGINE: Stopping sink, currently empty: {}", sink.empty());
             sink.stop();
-            
+
             // Wait for sink to be empty and fully drained
             let mut cleared_count = 0;
             while !sink.empty() {
@@ -106,18 +105,12 @@ impl AudioEngine {
                 cleared_count += 1;
             }
             println!("🔧 ENGINE: Cleared {} items from sink", cleared_count);
-            
+
             // Additional drain to ensure complete stop and resource cleanup
             std::thread::sleep(std::time::Duration::from_millis(100)); // Increased from 50ms
             println!("🔧 ENGINE: Sink fully drained");
         }
-        
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open audio file: {}", path.display()))?;
-        
-        let source = Decoder::new(BufReader::new(file))
-            .with_context(|| format!("Failed to decode audio file: {}", path.display()))?;
-        
+
         // Extract metadata in parallel if possible (but don't block loading)
         let audio_info = extract_audio_metadata(path).unwrap_or_else(|e| {
             log::warn!("Failed to extract metadata, using defaults: {}", e);
@@ -132,34 +125,62 @@ impl AudioEngine {
                 bitrate: None,
             }
         });
-        
+
+        // Load the file and decoder OUTSIDE the sink lock to avoid deadlocks
+        let file = File::open(path)
+            .with_context(|| format!("Failed to open audio file: {}", path.display()))?;
+
+        println!("🔧 ENGINE: Attempting to decode file with Rodio Decoder (seekable mode)");
+
+        // Use Decoder::try_from for seekable sources in Rodio 0.21
+        // This properly supports M4B files with seeking capability
+        let source = match Decoder::try_from(file) {
+            Ok(decoder) => {
+                println!("🔧 ENGINE: Successfully created decoder with seeking support");
+                decoder
+            }
+            Err(e) => {
+                eprintln!("❌ ENGINE: Failed to create decoder: {:?}", e);
+                eprintln!("❌ ENGINE: File path: {}", path.display());
+                eprintln!("❌ ENGINE: File extension: {:?}", path.extension());
+
+                return Err(anyhow::anyhow!("Failed to decode audio file '{}': {:?}", path.display(), e));
+            }
+        };
+
         {
             let sink = self.sink.lock().unwrap();
             println!("🔧 ENGINE: Appending source to sink");
             sink.append(source);
             println!("🔧 ENGINE: After append, sink empty: {}", sink.empty());
-            
-            // Wait for sink to have content - with longer timeout and progressive delays
-            let mut attempts = 0;
-            let max_attempts = 30; // Increased from 10 to 30
-            while sink.empty() && attempts < max_attempts {
-                // Progressive delay: start with short delays, then increase
-                let delay_ms = if attempts < 10 { 10 } else if attempts < 20 { 50 } else { 100 };
-                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
-                attempts += 1;
-                
-                // Log progress every 10 attempts
-                if attempts % 10 == 0 {
-                    println!("🔧 ENGINE: Still waiting for sink to load... attempt {}/{}", attempts, max_attempts);
+        }
+
+        // Wait for sink to have content - check WITHOUT holding the lock for too long
+        let mut attempts = 0;
+        let max_attempts = 50; // Increased to 50 for slower systems
+        loop {
+            {
+                let sink = self.sink.lock().unwrap();
+                if !sink.empty() {
+                    println!("🔧 ENGINE: Sink loaded with content after {} attempts", attempts);
+                    break;
                 }
             }
-            
-            if sink.empty() {
+
+            if attempts >= max_attempts {
                 println!("❌ ENGINE: Sink still empty after {} attempts, file may be corrupted or unsupported", attempts);
                 return Err(anyhow::anyhow!("Failed to load audio into sink after {} attempts. File path: {}", attempts, path.display()));
             }
-            
-            println!("🔧 ENGINE: Sink loaded with content after {} attempts", attempts);
+
+            // Progressive delay: start with short delays, then increase
+            let delay_ms = if attempts < 10 { 10 } else if attempts < 30 { 50 } else { 100 };
+            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            attempts += 1;
+
+            // Log progress every 10 attempts
+            if attempts % 10 == 0 {
+                println!("🔧 ENGINE: Still waiting for sink to load... attempt {}/{}", attempts, max_attempts);
+            }
         }
         
         // Update all state at once
@@ -427,15 +448,16 @@ impl AudioEngine {
     fn load_file_with_offset<P: AsRef<Path>>(&self, path: P, offset_seconds: u64) -> Result<()> {
         let path = path.as_ref();
         log::info!("🔧 ENGINE: Loading file with {}s offset: {}", offset_seconds, path.display());
-        
+
         let file = File::open(path)
             .with_context(|| format!("Failed to open audio file: {}", path.display()))?;
-        
-        let decoder = Decoder::new(BufReader::new(file))
+
+        // Use Decoder::try_from for seekable sources (Rodio 0.21)
+        let decoder = Decoder::try_from(file)
             .with_context(|| format!("Failed to decode audio file: {}", path.display()))?;
-        
+
         let sink = self.sink.lock().unwrap();
-        
+
         // Skip samples to reach the desired position using rodio's skip_duration
         if offset_seconds > 0 {
             let source_with_skip = decoder.skip_duration(std::time::Duration::from_secs(offset_seconds));
@@ -443,11 +465,11 @@ impl AudioEngine {
         } else {
             sink.append(decoder);
         }
-        
+
         // Update seek offset and reset timing
         let mut seek_offset = self.seek_offset.lock().unwrap();
         *seek_offset = offset_seconds;
-        
+
         let mut start_time = self.start_time.lock().unwrap();
         *start_time = Some(std::time::Instant::now());
         let mut pause_time = self.pause_time.lock().unwrap();
@@ -458,7 +480,7 @@ impl AudioEngine {
         *last_speed_change = None;
         let mut speed_adjusted_duration = self.speed_adjusted_duration.lock().unwrap();
         *speed_adjusted_duration = std::time::Duration::ZERO;
-        
+
         Ok(())
     }
 

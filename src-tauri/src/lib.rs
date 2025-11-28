@@ -8,7 +8,7 @@ mod document;
 
 use models::{AppConfig, SystemInfo};
 use database::{DatabaseManager, models::*, repository::*};
-use audio::{AudioManager, AudioInfo, PlaybackStatus, Track};
+use audio::{AudioManager, AudioInfo, PlaybackStatus, Track, extract_audio_metadata};
 use filesystem::{FileSystemScanner, AudioFileInfo};
 use services::RecommendationService;
 use download::DownloadManager;
@@ -82,84 +82,104 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
             }
         };
 
-        // Main audio thread loop
+        // Main audio thread loop with error recovery
         for command in receiver {
-            match command {
-                AudioCommand::LoadFile { file_path, response } => {
-                    println!("🎵 THREAD: Loading file: {}", file_path);
-                    // Stop any existing audio first
-                    audio_manager.stop();
-                    
-                    let track = Track {
-                        id: uuid::Uuid::new_v4().to_string(),
-                        file_path: file_path.clone(),
-                        title: None,
-                        duration: None,
-                    };
-                    
-                    // Load the track and play it immediately as a single atomic operation
-                    let result = audio_manager.play_track_immediately(track)
-                        .and_then(|_| {
-                            // Add a small delay to ensure loading is complete
-                            std::thread::sleep(std::time::Duration::from_millis(10));
-                            audio_manager.play()
-                        })
-                        .map_err(|e| e.to_string());
-                    let _ = response.send(result);
+            // Wrap each command in a catch_unwind to prevent thread crashes
+            let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                match command {
+                    AudioCommand::LoadFile { file_path, response } => {
+                        println!("🎵 THREAD: Loading file: {}", file_path);
+                        // Stop any existing audio first
+                        audio_manager.stop();
+
+                        let track = Track {
+                            id: uuid::Uuid::new_v4().to_string(),
+                            file_path: file_path.clone(),
+                            title: None,
+                            duration: None,
+                        };
+
+                        // Load the track and play it immediately as a single atomic operation
+                        let result = match audio_manager.play_track_immediately(track) {
+                            Ok(_) => {
+                                // Add a small delay to ensure loading is complete
+                                std::thread::sleep(std::time::Duration::from_millis(10));
+                                audio_manager.play().map_err(|e| {
+                                    eprintln!("❌ THREAD: Failed to play after loading: {}", e);
+                                    e.to_string()
+                                })
+                            }
+                            Err(e) => {
+                                eprintln!("❌ THREAD: Failed to load track: {}", e);
+                                Err(e.to_string())
+                            }
+                        };
+
+                        if let Err(send_err) = response.send(result) {
+                            eprintln!("❌ THREAD: Failed to send response: {:?}", send_err);
+                        }
+                    }
+                    AudioCommand::Play { response } => {
+                        println!("🎵 THREAD: Playing");
+                        let result = audio_manager.play().map_err(|e| e.to_string());
+                        let _ = response.send(result);
+                    }
+                    AudioCommand::Pause { response } => {
+                        println!("🎵 THREAD: Pausing");
+                        audio_manager.pause();
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::Stop { response } => {
+                        println!("🎵 THREAD: Stopping");
+                        audio_manager.stop();
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::SetVolume { volume, response } => {
+                        println!("🎵 THREAD: Setting volume: {}", volume);
+                        audio_manager.set_volume(volume);
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::SetSpeed { speed, response } => {
+                        println!("🎵 THREAD: Setting speed: {}", speed);
+                        audio_manager.set_speed(speed);
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::Seek { position, response } => {
+                        println!("🎵 THREAD: Seeking to: {}", position);
+                        let result = audio_manager.seek(position).map_err(|e| e.to_string());
+                        let _ = response.send(result);
+                    }
+                    AudioCommand::GetStatus { response } => {
+                        let status = audio_manager.get_status();
+                        let _ = response.send(status);
+                    }
+                    AudioCommand::AddToQueue { track, response } => {
+                        println!("🎵 THREAD: Adding to queue: {}", track.file_path);
+                        audio_manager.add_to_queue(track);
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::PlayNext { response } => {
+                        println!("🎵 THREAD: Playing next");
+                        let result = audio_manager.play_next().map_err(|e| e.to_string());
+                        let _ = response.send(result);
+                    }
+                    AudioCommand::ClearQueue { response } => {
+                        println!("🎵 THREAD: Clearing queue");
+                        audio_manager.clear_queue();
+                        let _ = response.send(Ok(()));
+                    }
+                    AudioCommand::GetQueue { response } => {
+                        let queue = audio_manager.get_queue();
+                        let _ = response.send(queue);
+                    }
                 }
-                AudioCommand::Play { response } => {
-                    println!("🎵 THREAD: Playing");
-                    let result = audio_manager.play().map_err(|e| e.to_string());
-                    let _ = response.send(result);
-                }
-                AudioCommand::Pause { response } => {
-                    println!("🎵 THREAD: Pausing");
-                    audio_manager.pause();
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::Stop { response } => {
-                    println!("🎵 THREAD: Stopping");
-                    audio_manager.stop();
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::SetVolume { volume, response } => {
-                    println!("🎵 THREAD: Setting volume: {}", volume);
-                    audio_manager.set_volume(volume);
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::SetSpeed { speed, response } => {
-                    println!("🎵 THREAD: Setting speed: {}", speed);
-                    audio_manager.set_speed(speed);
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::Seek { position, response } => {
-                    println!("🎵 THREAD: Seeking to: {}", position);
-                    let result = audio_manager.seek(position).map_err(|e| e.to_string());
-                    let _ = response.send(result);
-                }
-                AudioCommand::GetStatus { response } => {
-                    let status = audio_manager.get_status();
-                    let _ = response.send(status);
-                }
-                AudioCommand::AddToQueue { track, response } => {
-                    println!("🎵 THREAD: Adding to queue: {}", track.file_path);
-                    audio_manager.add_to_queue(track);
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::PlayNext { response } => {
-                    println!("🎵 THREAD: Playing next");
-                    let result = audio_manager.play_next().map_err(|e| e.to_string());
-                    let _ = response.send(result);
-                }
-                AudioCommand::ClearQueue { response } => {
-                    println!("🎵 THREAD: Clearing queue");
-                    audio_manager.clear_queue();
-                    let _ = response.send(Ok(()));
-                }
-                AudioCommand::GetQueue { response } => {
-                    let queue = audio_manager.get_queue();
-                    let _ = response.send(queue);
-                }
+            }));
+
+            if let Err(panic_err) = panic_result {
+                eprintln!("❌ THREAD: Audio thread panic caught and recovered: {:?}", panic_err);
+                // Thread continues running despite the panic
+                // The command's response channel may have been consumed in the panic,
+                // but future commands will still work
             }
         }
         println!("🎵 THREAD: Audio thread ending");
@@ -466,6 +486,8 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
         
         // Find all audio files in the directory
         let mut audio_files = Vec::new();
+        let mut m4b_files = Vec::new();
+
         match fs::read_dir(&file_path) {
             Ok(entries) => {
                 for entry in entries {
@@ -473,7 +495,11 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
                         let path = entry.path();
                         if let Some(extension) = path.extension() {
                             let ext = extension.to_string_lossy().to_lowercase();
-                            if matches!(ext.as_str(), "mp3" | "m4a" | "m4b" | "aac" | "flac" | "wav" | "ogg" | "opus" | "wma") {
+
+                            // Separate M4B files from other audio files
+                            if ext == "m4b" {
+                                m4b_files.push(path);
+                            } else if matches!(ext.as_str(), "mp3" | "m4a" | "aac" | "flac" | "wav" | "ogg" | "opus" | "wma") {
                                 audio_files.push(path);
                             }
                         }
@@ -485,7 +511,18 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
                 return Err(format!("Failed to read LibriVox directory '{}': {}", file_path, e));
             }
         }
-        
+
+        // If we have both M4B and other audio files, prefer the other files
+        // The M4B is likely a combined version that may be corrupt or metadata-only
+        if !m4b_files.is_empty() && !audio_files.is_empty() {
+            println!("📁 LIBRIVOX LOCAL: Found both M4B ({}) and individual audio files ({}). Using individual files only.",
+                m4b_files.len(), audio_files.len());
+        } else if !m4b_files.is_empty() && audio_files.is_empty() {
+            // Only M4B exists - use it
+            println!("📁 LIBRIVOX LOCAL: Found only M4B files, using them");
+            audio_files = m4b_files;
+        }
+
         // Sort files for consistent ordering (usually gives us proper chapter order)
         audio_files.sort();
         
@@ -775,14 +812,18 @@ async fn import_audiobook_from_directory(
     // Analyze the directory for audiobook structure
     let audiobook_info = scanner.analyze_audiobook_directory(directory)
         .map_err(|e| format!("Failed to analyze directory: {}", e))?;
-    
+
+    // Try to find cover art in the directory
+    let cover_image_path = scanner.find_cover_art(directory)
+        .map(|path| path.to_string_lossy().to_string());
+
     // Get database pool
     let pool = {
         let db_state = state.db.lock().unwrap();
         let db = db_state.as_ref().ok_or("Database not initialized")?;
         db.get_pool().map_err(|e| e.to_string())?.clone()
     };
-    
+
     // Create audiobook record
     let audiobook_dto = CreateAudiobookDto {
         title: audiobook_info.title.clone(),
@@ -792,7 +833,7 @@ async fn import_audiobook_from_directory(
         genre: None,
         file_path: audiobook_info.directory_path.clone(),
         duration: audiobook_info.total_duration.map(|d| d as i64),
-        cover_image_path: None,
+        cover_image_path,
     };
     
     let audiobook_repo = AudiobookRepository::new(&pool);
@@ -845,6 +886,38 @@ async fn find_cover_art(directory_path: String) -> Result<Option<String>, String
 }
 
 #[tauri::command]
+async fn read_cover_image_as_base64(image_path: String) -> Result<String, String> {
+    use std::fs;
+    use base64::{Engine as _, engine::general_purpose};
+
+    // Read the image file
+    let image_data = fs::read(&image_path)
+        .map_err(|e| format!("Failed to read image file: {}", e))?;
+
+    // Determine MIME type from extension
+    let extension = std::path::Path::new(&image_path)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    let mime_type = match extension.as_str() {
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => "image/jpeg", // default to jpeg
+    };
+
+    // Encode to base64
+    let base64_data = general_purpose::STANDARD.encode(&image_data);
+
+    // Return as data URL
+    Ok(format!("data:{};base64,{}", mime_type, base64_data))
+}
+
+#[tauri::command]
 async fn get_audio_info(file_path: String) -> Result<AudioInfo, String> {
     audio::AudioEngine::get_audio_info(&file_path).map_err(|e| e.to_string())
 }
@@ -888,7 +961,15 @@ async fn create_chapters_for_existing_tts_audiobook(
     audiobook: &Audiobook,
 ) -> Result<Vec<Chapter>, String> {
     println!("🔧 TTS: Creating missing chapters for TTS audiobook: {}", audiobook.title);
-    
+
+    // First, check again if chapters already exist (race condition protection)
+    let chapter_repo = ChapterRepository::new(pool);
+    let existing = chapter_repo.find_by_audiobook_id(&audiobook.id).await.map_err(|e| e.to_string())?;
+    if !existing.is_empty() {
+        println!("🔧 TTS: Chapters already exist ({}), skipping creation", existing.len());
+        return Ok(existing);
+    }
+
     let output_dir = std::path::Path::new(&audiobook.file_path);
     if !output_dir.exists() {
         return Ok(Vec::new());
@@ -953,26 +1034,58 @@ async fn create_chapters_for_librivox_audiobook(
     audiobook: &Audiobook,
 ) -> Result<Vec<Chapter>, String> {
     println!("🔧 LIBRIVOX: Creating missing chapters for LibriVox audiobook: {}", audiobook.title);
-    
+
+    // First, check again if chapters already exist (race condition protection)
+    let chapter_repo = ChapterRepository::new(pool);
+    let existing = chapter_repo.find_by_audiobook_id(&audiobook.id).await.map_err(|e| e.to_string())?;
+    if !existing.is_empty() {
+        println!("🔧 LIBRIVOX: Chapters already exist ({}), skipping creation", existing.len());
+        return Ok(existing);
+    }
+
     let audio_dir = std::path::Path::new(&audiobook.file_path);
     if !audio_dir.exists() {
         return Ok(Vec::new());
     }
-    
+
     // Scan for audio files in the directory (each file = one chapter)
     let mut audio_files = Vec::new();
+    let mut has_m4b = false;
+    let mut m4b_file: Option<(String, std::path::PathBuf)> = None;
+
     if let Ok(entries) = std::fs::read_dir(audio_dir) {
         for entry in entries.flatten() {
             if let Some(file_name) = entry.file_name().to_str() {
                 let lower_name = file_name.to_lowercase();
-                if lower_name.ends_with(".mp3") || lower_name.ends_with(".wav") || 
+
+                // Check for M4B files separately
+                if lower_name.ends_with(".m4b") {
+                    has_m4b = true;
+                    m4b_file = Some((file_name.to_string(), entry.path()));
+                    continue; // Don't add M4B to audio_files yet
+                }
+
+                // Add other audio files
+                if lower_name.ends_with(".mp3") || lower_name.ends_with(".wav") ||
                    lower_name.ends_with(".m4a") || lower_name.ends_with(".ogg") {
                     audio_files.push((file_name.to_string(), entry.path()));
                 }
             }
         }
     }
-    
+
+    // If we have both M4B and individual MP3/other files, prefer the individual files
+    // The M4B is likely a combined version of the same audiobook
+    if has_m4b && !audio_files.is_empty() {
+        println!("🔧 LIBRIVOX: Found both M4B and individual audio files ({} files). Using individual files only.", audio_files.len());
+    } else if has_m4b && audio_files.is_empty() {
+        // Only M4B file exists - this is a single-file audiobook
+        println!("🔧 LIBRIVOX: Found only M4B file, treating as single-file audiobook");
+        if let Some(m4b) = m4b_file {
+            audio_files.push(m4b);
+        }
+    }
+
     if audio_files.is_empty() {
         return Ok(Vec::new());
     }
@@ -1011,19 +1124,29 @@ async fn create_chapters_for_librivox_audiobook(
         } else {
             format!("Chapter {}", index + 1)
         };
-        
+
+        // Extract duration and file size from the actual audio file
+        let (duration, file_size) = match extract_audio_metadata(file_path) {
+            Ok(info) => (info.duration.map(|d| d as i64), Some(info.file_size as i64)),
+            Err(e) => {
+                println!("⚠️ LIBRIVOX: Could not extract metadata for {}: {}", file_name, e);
+                (None, None)
+            }
+        };
+
         let chapter_dto = CreateChapterDto {
             audiobook_id: audiobook.id.clone(),
             chapter_number: (index + 1) as i32,
             title: chapter_title,
             file_path: file_path.to_string_lossy().to_string(),
-            duration: None,
-            file_size: None,
+            duration,
+            file_size,
         };
-        
+
         match chapter_repo.create(chapter_dto).await {
             Ok(chapter) => {
-                println!("✅ LIBRIVOX: Created chapter: {} -> {}", index + 1, file_name);
+                let duration_str = duration.map(|d| format!("{}s", d)).unwrap_or_else(|| "unknown".to_string());
+                println!("✅ LIBRIVOX: Created chapter: {} -> {} ({})", index + 1, file_name, duration_str);
                 created_chapters.push(chapter);
             }
             Err(e) => {
@@ -1671,9 +1794,50 @@ async fn search_librivox(params: LibriVoxSearchParams) -> Result<serde_json::Val
     // Try each strategy until we get results
     for (index, strategy) in search_strategies.iter().enumerate() {
         println!("🔍 LIBRIVOX: Trying search strategy {}: {:?}", index + 1, strategy);
-        
+
         match try_librivox_search(&strategy).await {
-            Ok(results) => {
+            Ok(mut results) => {
+                // If we have an original title to match against, filter the results client-side
+                if let Some(original_title) = &params.title {
+                    if let Some(books) = results.get_mut("books").and_then(|b| b.as_array_mut()) {
+                        let original_title_lower = original_title.to_lowercase();
+                        let title_words: Vec<&str> = original_title_lower.split_whitespace().collect();
+
+                        // Filter books to only include those that match the title closely
+                        let filtered_books: Vec<serde_json::Value> = books.iter()
+                            .filter(|book| {
+                                if let Some(book_title) = book.get("title").and_then(|t| t.as_str()) {
+                                    let book_title_lower = book_title.to_lowercase();
+
+                                    // Exact match or contains all words from original title
+                                    if book_title_lower.contains(&original_title_lower) {
+                                        return true;
+                                    }
+
+                                    // Check if most title words are present
+                                    let matching_words = title_words.iter()
+                                        .filter(|word| word.len() > 2 && book_title_lower.contains(*word))
+                                        .count();
+
+                                    matching_words >= (title_words.len() / 2).max(1)
+                                } else {
+                                    false
+                                }
+                            })
+                            .cloned()
+                            .collect();
+
+                        if !filtered_books.is_empty() {
+                            println!("🔍 LIBRIVOX: Filtered {} books down to {} matches for title '{}'",
+                                books.len(), filtered_books.len(), original_title);
+                            *books = filtered_books;
+                        } else {
+                            println!("⚠️ LIBRIVOX: No books matched title '{}' after filtering, keeping all {} results",
+                                original_title, books.len());
+                        }
+                    }
+                }
+
                 println!("✅ LIBRIVOX: Strategy {} succeeded", index + 1);
                 return Ok(results);
             },
@@ -1683,7 +1847,7 @@ async fn search_librivox(params: LibriVoxSearchParams) -> Result<serde_json::Val
             }
         }
     }
-    
+
     // If all strategies fail, return the last error
     Err("No search strategy succeeded. Try more specific search terms or author names.".to_string())
 }
@@ -2451,6 +2615,63 @@ async fn update_audiobook_file_path(
 }
 
 #[tauri::command]
+async fn update_audiobook(
+    state: State<'_, AppState>,
+    audiobook_id: String,
+    updates: std::collections::HashMap<String, String>
+) -> Result<(), String> {
+    println!("📝 UPDATE: Updating audiobook {} with {} fields", audiobook_id, updates.len());
+
+    // Get database pool
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    // Build dynamic UPDATE query
+    let mut query_parts = Vec::new();
+    let mut values: Vec<String> = Vec::new();
+
+    for (key, value) in updates.iter() {
+        // Only allow safe field names to prevent SQL injection
+        let safe_key = match key.as_str() {
+            "title" | "author" | "narrator" | "description" | "genre" |
+            "file_path" | "cover_image_path" | "duration" => key.as_str(),
+            _ => return Err(format!("Invalid field name: {}", key))
+        };
+
+        query_parts.push(format!("{} = ?", safe_key));
+        values.push(value.clone());
+    }
+
+    if query_parts.is_empty() {
+        return Err("No valid fields to update".to_string());
+    }
+
+    // Add updated_at field
+    query_parts.push("updated_at = ?".to_string());
+    values.push(chrono::Utc::now().to_rfc3339());
+
+    let query_str = format!("UPDATE audiobooks SET {} WHERE id = ?", query_parts.join(", "));
+    values.push(audiobook_id.clone());
+
+    println!("📝 UPDATE: Query: {}", query_str);
+
+    let mut query = sqlx::query(&query_str);
+    for value in values {
+        query = query.bind(value);
+    }
+
+    query.execute(&pool)
+        .await
+        .map_err(|e| format!("Failed to update audiobook: {}", e))?;
+
+    println!("✅ UPDATE: Successfully updated audiobook");
+    Ok(())
+}
+
+#[tauri::command]
 async fn update_chapter_file_path(
     state: State<'_, AppState>,
     audiobook_id: String,
@@ -2523,11 +2744,12 @@ pub fn run() {
             get_file_info,
             import_audiobook_from_files,
             import_audiobook_from_directory,
+            find_cover_art,
+            read_cover_image_as_base64,
             get_audiobook_chapters,
             play_chapter,
             get_chapter_by_number,
             create_chapters_for_audiobook,
-            find_cover_art,
             save_playback_state,
             load_playback_state,
             remove_playback_state,
@@ -2557,8 +2779,10 @@ pub fn run() {
             extract_thumbnail,
             save_audio_file,
             create_tts_audiobook,
+            update_audiobook,
             update_audiobook_file_path,
-            update_chapter_file_path
+            update_chapter_file_path,
+            find_cover_art
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

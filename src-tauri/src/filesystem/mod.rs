@@ -32,6 +32,7 @@ pub struct AudioMetadata {
     pub channels: Option<u8>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScanProgress {
     pub current_file: String,
@@ -183,6 +184,8 @@ impl FileSystemScanner {
         let meta_opts: MetadataOptions = Default::default();
         let fmt_opts: FormatOptions = Default::default();
 
+        // Note: For m4b files with large metadata, Symphonia may hit probe limits
+        // The codec features (isomp4, alac) help with proper format detection
         let probed = get_probe()
             .format(&hint, mss, &fmt_opts, &meta_opts)
             .map_err(|e| format!("Failed to probe format: {}", e))?;
@@ -252,17 +255,36 @@ impl FileSystemScanner {
     }
 
     pub fn find_cover_art(&self, directory: &Path) -> Option<PathBuf> {
+        // First, try common cover art filenames
         let cover_names = [
-            "cover.jpg", "cover.jpeg", "cover.png",
-            "folder.jpg", "folder.jpeg", "folder.png",
-            "albumart.jpg", "albumart.jpeg", "albumart.png",
-            "front.jpg", "front.jpeg", "front.png",
+            "cover.jpg", "cover.jpeg", "cover.png", "cover.webp",
+            "folder.jpg", "folder.jpeg", "folder.png", "folder.webp",
+            "albumart.jpg", "albumart.jpeg", "albumart.png", "albumart.webp",
+            "front.jpg", "front.jpeg", "front.png", "front.webp",
         ];
 
         for name in &cover_names {
             let cover_path = directory.join(name);
             if cover_path.exists() && cover_path.is_file() {
                 return Some(cover_path);
+            }
+        }
+
+        // If no common names found, look for any image file in the directory
+        if let Ok(entries) = fs::read_dir(directory) {
+            let image_extensions = ["jpg", "jpeg", "png", "webp", "gif", "bmp"];
+
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(extension) = path.extension() {
+                        if let Some(ext_str) = extension.to_str() {
+                            if image_extensions.contains(&ext_str.to_lowercase().as_str()) {
+                                return Some(path);
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -285,9 +307,9 @@ impl FileSystemScanner {
 
             if path.is_file() && self.is_supported_audio_file(&path) {
                 let file_info = self.get_audio_file_info(&path);
-                if file_info.is_valid {
-                    audio_files.push(file_info);
-                }
+                // Include audio files even if metadata extraction fails
+                // We'll still be able to play them, just won't have metadata initially
+                audio_files.push(file_info);
             }
         }
 

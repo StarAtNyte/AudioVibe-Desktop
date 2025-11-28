@@ -96,35 +96,42 @@ export class LocalBookService {
         zipUrl: (book as any).download_url_zip
       });
       
-      // Stage 3: Processing
+      // Stage 3: Processing - Analyzing files
       if (onProgress) {
         onProgress({
           book,
           stage: 'processing',
-          progress: 80,
-          message: 'Processing audio files and creating database entry...'
+          progress: 70,
+          message: 'Analyzing audio files...'
         });
       }
-      
-      // Create the audiobook entry in the database
-      const audiobookData = {
-        title: book.title,
-        author: book.author,
-        narrator: book.narrator,
-        description: book.description,
-        genre: book.genre,
-        file_path: (downloadResult as any).local_path, // Path to the downloaded files
-      };
-      
-      await invoke('create_audiobook', { dto: audiobookData });
-      
+
+      // Small delay to let UI update
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Stage 3b: Processing - Creating chapters
+      if (onProgress) {
+        onProgress({
+          book,
+          stage: 'processing',
+          progress: 85,
+          message: 'Creating chapters and database entries...'
+        });
+      }
+
+      // Import the audiobook from the directory (this creates both audiobook and chapters)
+      const directoryPath = (downloadResult as any).local_path;
+      await invoke('import_audiobook_from_directory', {
+        directoryPath: directoryPath
+      });
+
       // Stage 4: Completed
       if (onProgress) {
         onProgress({
           book,
           stage: 'completed',
           progress: 100,
-          message: 'Audiobook successfully added to library!'
+          message: 'Audiobook and chapters successfully added to library!'
         });
       }
       

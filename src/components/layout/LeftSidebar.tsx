@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useLibraryStore, useAudioStore, useAppStore } from '../../store';
+import { useOnboardingStore } from '../../store/onboarding';
 import { useResponsive } from '../../hooks/useResponsive';
-import { localBooksDatabase } from '../../data/localBooks';
+import { archiveService, ArchiveAudiobook } from '../../services/archiveService';
 import { BookCover } from '../common/BookCover';
 import {
   BookOpenIcon,
@@ -28,6 +29,7 @@ export const LeftSidebar: React.FC = () => {
   const { audiobooks, fetchAudiobooks } = useLibraryStore();
   const { currentAudiobookId, loadAudio, setAudiobook, play } = useAudioStore();
   const { setLeftSidebarOpen } = useAppStore();
+  const { selectedGenres } = useOnboardingStore();
   const { isMobile, isTablet, isSmallDesktop } = useResponsive();
 
   // Load audiobooks when component mounts
@@ -38,7 +40,9 @@ export const LeftSidebar: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLButtonElement>(null);
-  
+  const [recommendedBooks, setRecommendedBooks] = useState<ArchiveAudiobook[]>([]);
+  const [loadingRecommendations, setLoadingRecommendations] = useState(false);
+
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -46,31 +50,36 @@ export const LeftSidebar: React.FC = () => {
         setShowMenu(false);
       }
     };
-    
+
     document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-  
-  // Get recommended books from local database
-  const getRecommendedBooks = useCallback(() => {
-    // Use the localBooksDatabase directly as sample recommendations
-    return localBooksDatabase
-      .sort(() => 0.5 - Math.random())
-      .slice(0, 6)
-      .map(book => ({
-        id: book.id,
-        title: book.title,
-        author: book.author,
-        genre: book.genre,
-        rating: 4.5,
-        cover_image_url: book.cover_image_path
-      }));
-  }, []);
 
-  const recommendedBooks = useMemo(() => getRecommendedBooks(), [getRecommendedBooks]);
-  const showRecommendations = audiobooks.length < 6;
+  // Load recommended books from Archive.org based on user preferences
+  useEffect(() => {
+    const loadRecommendations = async () => {
+      if (audiobooks.length >= 6) return; // Don't show recommendations if library is full
+
+      setLoadingRecommendations(true);
+      try {
+        const books = selectedGenres.length > 0
+          ? await archiveService.getByGenres(selectedGenres, 10)
+          : await archiveService.getPopular(10);
+
+        setRecommendedBooks(books);
+      } catch (error) {
+        console.error('Failed to load recommendations:', error);
+      } finally {
+        setLoadingRecommendations(false);
+      }
+    };
+
+    loadRecommendations();
+  }, [audiobooks.length, selectedGenres]);
+
+  const showRecommendations = audiobooks.length < 6 && recommendedBooks.length > 0;
   
   // Filter and sort audiobooks
   const filteredAndSortedAudiobooks = useMemo(() => {
@@ -122,7 +131,7 @@ export const LeftSidebar: React.FC = () => {
   const handlePlayClick = async (audiobook: any, e: React.MouseEvent) => {
     // Prevent the card click event from firing
     e.stopPropagation();
-    
+
     // Load and play the audiobook, then navigate to player
     try {
       // If it's not the current audiobook, load it
@@ -139,6 +148,15 @@ export const LeftSidebar: React.FC = () => {
       await play();
     } catch (error) {
       console.error('Failed to load and play audiobook:', error);
+    }
+  };
+
+  const handleRecommendedBookClick = (book: ArchiveAudiobook) => {
+    // Navigate to home page where they can see more details and add the book
+    navigate('/home');
+    // Close sidebar on mobile
+    if (isMobile) {
+      setLeftSidebarOpen(false);
     }
   };
   
@@ -303,37 +321,57 @@ export const LeftSidebar: React.FC = () => {
                 <SparklesIcon className="w-4 h-4 text-yellow-400" />
                 <span>{audiobooks.length === 0 ? 'Recommended for you' : 'Discover more'}</span>
               </h3>
-              
-              {recommendedBooks.slice(0, Math.max(6 - audiobooks.length, 3)).map((book) => (
-                <div 
-                  key={book.id}
-                  onClick={() => navigate('/home')}
-                  className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-800 cursor-pointer group transition-colors"
-                >
-                  <div className="w-10 h-10 rounded shadow-sm overflow-hidden">
-                    <BookCover 
-                      bookId={book.id}
-                      title={book.title}
-                      coverUrl={book.cover_image_url}
-                      className="w-full h-full object-cover"
-                      fallbackClassName="w-full h-full bg-gradient-to-br from-primary-500 to-accent-emerald-500 flex items-center justify-center"
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-medium text-xs truncate">
-                      {book.title}
-                    </p>
-                    <div className="flex items-center space-x-2">
-                      <p className="text-gray-500 dark:text-gray-400 text-xs truncate">{book.author}</p>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-yellow-400 text-xs">⭐</span>
-                        <span className="text-gray-400 text-xs">{book.rating}</span>
+
+              {loadingRecommendations ? (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+                </div>
+              ) : (
+                recommendedBooks.slice(0, Math.max(6 - audiobooks.length, 3)).map((book) => (
+                  <div
+                    key={book.identifier}
+                    onClick={() => handleRecommendedBookClick(book)}
+                    className="flex items-center space-x-3 p-2 rounded-md hover:bg-gray-800 cursor-pointer group transition-colors"
+                  >
+                    <div className="w-10 h-10 rounded shadow-sm overflow-hidden">
+                      {book.coverUrl ? (
+                        <img
+                          src={book.coverUrl}
+                          alt={book.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            const target = e.currentTarget as HTMLImageElement;
+                            target.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gradient-to-br from-primary-500 to-accent-emerald-500 flex items-center justify-center">
+                          <span className="text-white font-bold text-xs">
+                            {book.title.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white font-medium text-xs truncate">
+                        {book.title}
+                      </p>
+                      <div className="flex items-center space-x-2">
+                        <p className="text-gray-500 dark:text-gray-400 text-xs truncate">
+                          {book.creator || 'Unknown Author'}
+                        </p>
+                        {book.avg_rating && book.avg_rating > 0 && (
+                          <div className="flex items-center space-x-1">
+                            <span className="text-yellow-400 text-xs">⭐</span>
+                            <span className="text-gray-400 text-xs">{book.avg_rating.toFixed(1)}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
+                    <PlusIcon className="w-4 h-4 text-gray-400 group-hover:text-green-500 transition-colors" />
                   </div>
-                  <PlusIcon className="w-4 h-4 text-gray-400 group-hover:text-green-500 transition-colors" />
-                </div>
-              ))}
+                ))
+              )}
               
               {audiobooks.length === 0 && (
                 <div className="mt-4 p-3 bg-green-500/10 border border-green-500/20 rounded-lg">

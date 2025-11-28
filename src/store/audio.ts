@@ -47,6 +47,11 @@ interface AudioState {
 // Progress update interval
 let progressInterval: number | null = null;
 
+// Smooth interpolation for position tracking
+let lastServerPosition = 0;
+let lastServerTimestamp = 0;
+let interpolationInterval: number | null = null;
+
 // Debounce mechanism for rapid clicks - use separate flags for different operations
 let isPlayInProgress = false;
 let isPauseInProgress = false;
@@ -75,13 +80,26 @@ export const useAudioStore = create<AudioState>()(
     // State setters
     setStatus: (status) => set({ status }),
     setAudioInfo: (audioInfo) => set({ audioInfo }),
-    setCurrentAudiobookId: (currentAudiobookId) => set({ currentAudiobookId }),
+    setCurrentAudiobookId: (currentAudiobookId) => {
+      const prevId = get().currentAudiobookId;
+      // Only clear chapters if audiobook is actually changing
+      if (prevId !== currentAudiobookId) {
+        console.log('🔄 Audiobook changed from', prevId, 'to', currentAudiobookId, '- clearing chapters');
+        set({ currentAudiobookId, chapters: [], currentChapterId: null });
+      } else {
+        set({ currentAudiobookId });
+      }
+    },
     setCurrentChapterId: (currentChapterId) => set({ currentChapterId }),
     setChapters: (chapters) => set({ chapters }),
     setPlayerVisible: (isPlayerVisible) => set({ isPlayerVisible }),
     setVolume: (volume) => set({ volume }),
     setMuted: (isMuted) => set({ isMuted }),
-    setAudiobook: (audiobookId) => set({ currentAudiobookId: audiobookId }),
+    setAudiobook: (audiobookId) => {
+      console.log('🔄 Setting audiobook to:', audiobookId);
+      // Clear chapters when changing audiobooks to force a fresh load
+      set({ currentAudiobookId: audiobookId, chapters: [], currentChapterId: null });
+    },
     
     // Audio control actions
     loadAudio: async (filePath: string, audiobookId?: string) => {
@@ -169,10 +187,66 @@ export const useAudioStore = create<AudioState>()(
         try {
           await newState.getStatus();
           console.log('Audio store: Status updated after loading');
+
+          // Start progress updates to ensure time display works immediately
+          // This will update the duration and position even if not playing yet
+          newState.startProgressUpdates();
+          console.log('Audio store: Started progress updates after loading');
         } catch (statusError) {
           console.warn('Failed to get status after loading audio:', statusError);
         }
-        
+
+        // If we have an audiobookId, load chapters and set the first one as current
+        if (audiobookId) {
+          console.log('Audio store: Loading chapters for audiobook:', audiobookId);
+          try {
+            await newState.loadChaptersForAudiobook(audiobookId);
+            console.log('Audio store: Chapters loaded successfully');
+
+            // Get fresh status to ensure we have the current file
+            await newState.getStatus();
+            const updatedState = get();
+            const currentFilePath = updatedState.status.current_file;
+
+            if (currentFilePath) {
+              console.log('Audio store: Current file from status:', currentFilePath);
+
+              // Normalize paths for comparison (convert backslashes to forward slashes)
+              const normalizePath = (path: string) => path.replace(/\\/g, '/').toLowerCase();
+              const normalizedCurrentPath = normalizePath(currentFilePath);
+
+              // Find the chapter that matches this file path
+              const matchingChapter = updatedState.chapters.find(ch => {
+                const normalizedChapterPath = normalizePath(ch.file_path);
+                return normalizedChapterPath === normalizedCurrentPath ||
+                       normalizedCurrentPath.endsWith(normalizedChapterPath.split('/').pop() || '') ||
+                       normalizedChapterPath.endsWith(normalizedCurrentPath.split('/').pop() || '');
+              });
+
+              if (matchingChapter) {
+                console.log('Audio store: Found matching chapter:', matchingChapter.title, matchingChapter.id);
+                set({ currentChapterId: matchingChapter.id });
+              } else {
+                console.warn('Audio store: No matching chapter found for file:', currentFilePath);
+                console.log('Audio store: Available chapters:', updatedState.chapters.map(ch => ({ id: ch.id, path: ch.file_path })));
+                // Fallback: set first chapter if available
+                if (updatedState.chapters.length > 0) {
+                  console.log('Audio store: Falling back to first chapter:', updatedState.chapters[0].id);
+                  set({ currentChapterId: updatedState.chapters[0].id });
+                }
+              }
+            } else {
+              console.warn('Audio store: No current file in status, using first chapter as fallback');
+              const updatedState = get();
+              if (updatedState.chapters.length > 0) {
+                set({ currentChapterId: updatedState.chapters[0].id });
+              }
+            }
+          } catch (chapterError) {
+            console.warn('Audio store: Failed to load chapters:', chapterError);
+          }
+        }
+
         // Minimal delay to ensure everything is properly initialized
         await new Promise(resolve => setTimeout(resolve, 50));
         
@@ -294,15 +368,20 @@ export const useAudioStore = create<AudioState>()(
         console.log('Stop operation already in progress, skipping');
         return;
       }
-      
+
       try {
         isStopInProgress = true;
         const tauriCore = await import('@tauri-apps/api/core');
         await tauriCore.invoke('stop_audio');
+
+        // Reset interpolation tracking
+        lastServerPosition = 0;
+        lastServerTimestamp = Date.now();
+
         await get().getStatus();
         get().stopProgressUpdates();
         set({ isPlayerVisible: false });
-        
+
         // Additional delay to ensure audio is fully stopped
         await new Promise(resolve => setTimeout(resolve, 150));
       } catch (error) {
@@ -318,10 +397,14 @@ export const useAudioStore = create<AudioState>()(
         console.log('⏭️ SEEK: Seeking to position:', positionSeconds);
         const tauriCore = await import('@tauri-apps/api/core');
         await tauriCore.invoke('seek_audio', { positionSeconds });
-        
+
+        // Reset interpolation tracking immediately
+        lastServerPosition = positionSeconds;
+        lastServerTimestamp = Date.now();
+
         // Wait for backend to stabilize after seek
         await new Promise(resolve => setTimeout(resolve, 200));
-        
+
         console.log('⏭️ SEEK: Getting status after seek');
         await get().getStatus();
         console.log('⏭️ SEEK: Seek operation completed');
@@ -358,6 +441,11 @@ export const useAudioStore = create<AudioState>()(
       try {
         const tauriCore = await import('@tauri-apps/api/core');
         const status = await tauriCore.invoke('get_playback_status') as PlaybackStatus;
+
+        // Update interpolation tracking
+        lastServerPosition = status.position;
+        lastServerTimestamp = Date.now();
+
         set({ status });
       } catch (error) {
         console.error('Failed to get status:', error);
@@ -365,20 +453,47 @@ export const useAudioStore = create<AudioState>()(
     },
 
     startProgressUpdates: () => {
+      // Clear any existing intervals
       if (progressInterval) {
         clearInterval(progressInterval);
       }
-      
+      if (interpolationInterval) {
+        clearInterval(interpolationInterval);
+      }
+
+      // Fetch actual position from backend every second
       progressInterval = setInterval(async () => {
-        const currentStatus = get().status;
-        if (currentStatus.state === 'Playing') {
-          try {
-            await get().getStatus();
-          } catch (error) {
-            console.warn('Failed to get audio status:', error);
+        try {
+          await get().getStatus();
+        } catch (error) {
+          console.warn('Failed to get audio status:', error);
+        }
+      }, 1000);
+
+      // Smooth interpolation at 60fps for visual updates
+      interpolationInterval = setInterval(() => {
+        const state = get();
+
+        // Only interpolate when playing
+        if (state.status.state === 'Playing') {
+          const now = Date.now();
+          const timeSinceLastUpdate = (now - lastServerTimestamp) / 1000; // Convert to seconds
+          const speed = state.status.speed || 1.0;
+
+          // Calculate interpolated position
+          const interpolatedPosition = lastServerPosition + (timeSinceLastUpdate * speed);
+
+          // Only update if the difference is significant (avoid unnecessary re-renders)
+          if (Math.abs(interpolatedPosition - state.status.position) > 0.05) {
+            set({
+              status: {
+                ...state.status,
+                position: Math.min(interpolatedPosition, state.status.duration || Infinity)
+              }
+            });
           }
         }
-      }, 1000); // Update every 1 second for smoother progress updates
+      }, 16); // ~60fps for smooth updates
     },
 
     stopProgressUpdates: () => {
@@ -386,38 +501,29 @@ export const useAudioStore = create<AudioState>()(
         clearInterval(progressInterval);
         progressInterval = null;
       }
+      if (interpolationInterval) {
+        clearInterval(interpolationInterval);
+        interpolationInterval = null;
+      }
     },
 
     // Chapter navigation functions
     loadChaptersForAudiobook: async (audiobookId: string) => {
       try {
+        console.log('🔄 Loading chapters for audiobook:', audiobookId);
         const tauriCore = await import('@tauri-apps/api/core');
         const chapterList = await tauriCore.invoke<any[]>('get_audiobook_chapters', {
           audiobookId: audiobookId
         });
-        
-        console.log('Loaded chapters:', chapterList);
+
+        console.log('✅ Loaded chapters:', chapterList.length, 'chapters');
         set({ chapters: chapterList });
-        
-        // If no current chapter is set and we have chapters, set the first one
-        const { currentChapterId } = get();
-        if (chapterList.length > 0 && !currentChapterId) {
-          const firstChapterId = chapterList[0].id;
-          console.log('Setting first chapter as current:', firstChapterId);
-          set({ currentChapterId: firstChapterId });
-          
-          // Also play the first chapter to ensure it's loaded in the player
-          try {
-            await tauriCore.invoke('play_chapter', { chapterId: firstChapterId });
-            console.log('First chapter loaded in player successfully');
-          } catch (playError) {
-            console.error('Failed to load first chapter in player:', playError);
-          }
-        }
-        
-        console.log(`Loaded ${chapterList.length} chapters for audiobook, current chapter: ${get().currentChapterId}`);
+
+        console.log(`✅ Loaded ${chapterList.length} chapters for audiobook`);
       } catch (error) {
-        console.error('Failed to load chapters for audiobook:', error);
+        console.error('❌ Failed to load chapters for audiobook:', error);
+        // Even on error, ensure chapters is set to empty array to prevent infinite loading
+        set({ chapters: [] });
       }
     },
 

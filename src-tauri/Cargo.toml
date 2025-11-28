@@ -49,8 +49,9 @@ base64 = "0.22"
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid", "migrate"] }
 
 # Audio dependencies
-rodio = { version = "0.19", features = ["symphonia"] }
-symphonia = { version = "0.5", features = ["mp3", "flac", "vorbis", "aac", "wav"] }
+# Using latest 0.21+ for better M4B/MP4 support and error handling
+rodio = { version = "0.21", features = ["symphonia-all"] }
+symphonia = { version = "0.5", features = ["mp3", "flac", "vorbis", "aac", "wav", "isomp4", "alac"] }
 
 # Document processing dependencies
 pdf-extract = "0.7"

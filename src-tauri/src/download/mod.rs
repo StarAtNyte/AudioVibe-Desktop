@@ -364,23 +364,31 @@ impl DownloadManager {
             .and_then(|r| r.as_array())
             .ok_or_else(|| anyhow::anyhow!("Invalid metadata response format"))?;
             
-        // Filter for original MP3 files with track numbers (these are the audiobook chapters)
+        // Filter for original audio files (these are the audiobook chapters)
+        // Note: We only check for source="original" and audio extension, not track field
+        // because some audiobooks don't have track metadata but are still valid chapters
         let audio_files: Vec<Value> = files.iter()
             .filter(|file| {
                 let is_original = file.get("source")
                     .and_then(|s| s.as_str())
                     .map(|s| s == "original")
                     .unwrap_or(false);
-                    
-                let has_track = file.get("track").is_some();
-                
+
                 let filename = file.get("name")
                     .and_then(|n| n.as_str())
                     .unwrap_or("");
-                    
+
                 let is_audio = self.is_audio_file_name(filename);
-                
-                is_original && has_track && is_audio
+
+                // Skip non-original files and files that are clearly not chapters
+                // (e.g., _files.xml, _meta.xml, etc.)
+                let is_metadata_file = filename.ends_with(".xml") ||
+                                      filename.ends_with(".txt") ||
+                                      filename.ends_with(".pdf") ||
+                                      filename.ends_with(".jpg") ||
+                                      filename.ends_with(".png");
+
+                is_original && is_audio && !is_metadata_file
             })
             .cloned()
             .collect();

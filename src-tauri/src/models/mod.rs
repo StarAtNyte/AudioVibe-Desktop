@@ -3,6 +3,7 @@
 use serde::{Deserialize, Serialize};
 // use chrono::{DateTime, Utc}; // Will be used in future tasks
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Audiobook {
     pub id: i64,
@@ -14,6 +15,7 @@ pub struct Audiobook {
     pub created_at: String,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PlaybackState {
     pub audiobook_id: i64,

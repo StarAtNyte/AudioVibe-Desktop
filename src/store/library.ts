@@ -190,14 +190,25 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       // Check if the audiobook being deleted is currently playing
       const audioState = useAudioStore.getState();
       const isCurrentlyPlaying = audioState.currentAudiobookId === id;
-      
+
       if (isCurrentlyPlaying) {
-        console.log('🛑 Stopping playback of audiobook being deleted:', id);
-        await audioState.stop();
+        console.log('🛑 Clearing currently playing audiobook being deleted:', id);
+        // Don't call stop() as it might trigger audio playback
+        // Just clear the state and hide the player
+        audioState.stopProgressUpdates();
         audioState.setCurrentAudiobookId(null);
         audioState.setAudioInfo(null);
         audioState.setChapters([]);
+        audioState.setCurrentChapterId(null);
         audioState.setPlayerVisible(false);
+
+        // Call the backend to stop audio without using the store's stop method
+        try {
+          const tauriCore = await import('@tauri-apps/api/core');
+          await tauriCore.invoke('stop_audio');
+        } catch (stopError) {
+          console.warn('Failed to stop audio on backend:', stopError);
+        }
       }
       
       const tauriCore = await import('@tauri-apps/api/core');

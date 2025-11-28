@@ -85,6 +85,7 @@ impl DocumentProcessor {
             .context("Failed to open EPUB file")?;
 
         let title = doc.mdata("title")
+            .map(|item| item.value.clone())
             .unwrap_or_else(|| {
                 path.file_stem()
                     .and_then(|stem| stem.to_str())
@@ -92,7 +93,8 @@ impl DocumentProcessor {
                     .to_string()
             });
 
-        let author = doc.mdata("creator");
+        let author = doc.mdata("creator")
+            .map(|item| item.value.clone());
 
         let mut chapters = Vec::new();
         let mut chapter_count = 0;
@@ -128,7 +130,7 @@ impl DocumentProcessor {
             let mut full_text = String::new();
             
             // Go back to the beginning
-            let _ = doc.set_current_page(0);
+            let _ = doc.set_current_chapter(0);
             
             while let Some((content, _)) = doc.get_current_str() {
                 let text = self.extract_text_from_html(&content);

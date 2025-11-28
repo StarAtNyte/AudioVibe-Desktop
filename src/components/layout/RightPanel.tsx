@@ -15,38 +15,30 @@ import clsx from 'clsx';
 
 export const RightPanel: React.FC = () => {
   const navigate = useNavigate();
-  const { currentAudiobookId, status } = useAudioStore();
+  const { currentAudiobookId, status, chapters } = useAudioStore();
   const { audiobooks } = useLibraryStore();
   const [newComment, setNewComment] = useState('');
-  
-  const currentAudiobook = currentAudiobookId ? 
+
+  const currentAudiobook = currentAudiobookId ?
     audiobooks.find(book => book.id === currentAudiobookId) : null;
 
+  // Calculate total time from all chapters
+  const totalTime = chapters.reduce((acc, chapter) => acc + (chapter.duration || 0), 0);
 
-  // Mock comments data
-  const comments = [
-    {
-      id: '1',
-      user: { name: 'Ezpeariah', avatar: '👤', time: '5 months ago' },
-      text: 'Dorian Gray sounded like a little bitch',
-      likes: 12,
-      isLiked: false
-    },
-    {
-      id: '2',
-      user: { name: 'baby', avatar: '👶', time: '10 months ago' },
-      text: 'thank youuuu! i had so much fun listening to this classic',
-      likes: 8,
-      isLiked: true
-    },
-    {
-      id: '3',
-      user: { name: 'Alex_Reader', avatar: '📚', time: '1 year ago' },
-      text: 'Oscar Wilde\'s masterpiece! The narration brings the characters to life beautifully.',
-      likes: 23,
-      isLiked: false
+  // Mock comments data - empty by default, can be populated per audiobook
+  const comments: any[] = [];
+
+  const formatDuration = (seconds: number): string => {
+    if (!seconds || seconds <= 0) return '0:00';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+
+    if (hours > 0) {
+      return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
-  ];
+    return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
 
   const handleCommentSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +88,14 @@ export const RightPanel: React.FC = () => {
           )}
           <div className="text-center">
             <h3 className="text-white font-semibold text-lg mb-1">{currentAudiobook.title}</h3>
-            <p className="text-gray-400 text-sm">{currentAudiobook.author}</p>
+            <p className="text-gray-400 text-sm mb-2">{currentAudiobook.author}</p>
+
+            {/* Chapter and Time Info */}
+            <div className="flex items-center justify-center space-x-2 text-xs text-gray-400">
+              <span>{chapters.length} {chapters.length === 1 ? 'chapter' : 'chapters'}</span>
+              <span>•</span>
+              <span>{formatDuration(totalTime)} total</span>
+            </div>
           </div>
         </div>
 
@@ -114,7 +113,16 @@ export const RightPanel: React.FC = () => {
               </button>
             </div>
 
-            {comments.map((comment) => (
+            {comments.length === 0 ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-gray-800 rounded-lg flex items-center justify-center mb-3 mx-auto">
+                  <span className="text-2xl">💬</span>
+                </div>
+                <p className="text-sm text-gray-400">No comments yet</p>
+                <p className="text-xs text-gray-500 mt-1">Be the first to share your thoughts!</p>
+              </div>
+            ) : (
+              comments.map((comment) => (
               <div key={comment.id} className="space-y-2">
                 <div className="flex items-start space-x-3">
                   <div className="w-6 h-6 bg-gray-700 rounded-full flex items-center justify-center text-xs">
@@ -149,7 +157,8 @@ export const RightPanel: React.FC = () => {
                   </div>
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
 
           {/* Comment Input */}
