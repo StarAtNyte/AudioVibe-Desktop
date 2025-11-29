@@ -522,6 +522,14 @@ export const useAudioStore = create<AudioState>()(
     // Chapter navigation functions
     loadChaptersForAudiobook: async (audiobookId: string) => {
       try {
+        const currentState = get();
+
+        // Skip if we already have chapters for this audiobook
+        if (currentState.currentAudiobookId === audiobookId && currentState.chapters.length > 0) {
+          console.log('🔄 Chapters already loaded for this audiobook, skipping');
+          return;
+        }
+
         console.log('🔄 Loading chapters for audiobook:', audiobookId);
         const tauriCore = await import('@tauri-apps/api/core');
         const chapterList = await tauriCore.invoke<any[]>('get_audiobook_chapters', {

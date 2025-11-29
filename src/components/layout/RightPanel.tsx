@@ -22,8 +22,12 @@ export const RightPanel: React.FC = () => {
   const currentAudiobook = currentAudiobookId ?
     audiobooks.find(book => book.id === currentAudiobookId) : null;
 
-  // Calculate total time from all chapters
-  const totalTime = chapters.reduce((acc, chapter) => acc + (chapter.duration || 0), 0);
+  // Calculate total time from all chapters, or use audiobook duration as fallback
+  const totalTimeFromChapters = chapters.reduce((acc, chapter) => acc + (chapter.duration || 0), 0);
+  // Use audiobook duration if available and chapters don't have duration, otherwise use chapters total
+  const totalTime = totalTimeFromChapters > 0
+    ? totalTimeFromChapters
+    : (currentAudiobook?.duration || 0);
 
   // Mock comments data - empty by default, can be populated per audiobook
   const comments: any[] = [];

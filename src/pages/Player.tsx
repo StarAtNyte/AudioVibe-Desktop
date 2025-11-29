@@ -7,11 +7,11 @@ import { invoke } from '@tauri-apps/api/core';
 
 export const Player: React.FC = () => {
   const navigate = useNavigate();
-  const { 
-    status, 
-    currentAudiobookId, 
-    play, 
-    pause, 
+  const {
+    status,
+    currentAudiobookId,
+    play,
+    pause,
     seek,
     getStatus,
     stopProgressUpdates,
@@ -20,10 +20,11 @@ export const Player: React.FC = () => {
     setCurrentChapterId: setStoreCurrentChapterId,
     loadChaptersForAudiobook
   } = useAudioStore();
-  
+
   const { audiobooks, fetchAudiobooks } = useLibraryStore();
-  
+
   const [lastManualChapterSelection, setLastManualChapterSelection] = useState<number>(0);
+  const [isLoadingChapters, setIsLoadingChapters] = useState(false);
 
   // Extract values from status
   const isPlaying = status.state === 'Playing';
@@ -48,12 +49,22 @@ export const Player: React.FC = () => {
     }
   }, [currentAudiobookId, currentAudiobook, audiobooks.length, fetchAudiobooks]);
 
-  // Load chapters when audiobook changes
+  // Load chapters when audiobook changes (non-blocking)
   useEffect(() => {
-    if (currentAudiobookId) {
-      loadChaptersForAudiobook(currentAudiobookId);
+    if (currentAudiobookId && chapters.length === 0) {
+      setIsLoadingChapters(true);
+      // Load chapters in background, don't block UI
+      loadChaptersForAudiobook(currentAudiobookId)
+        .catch(error => {
+          console.warn('Failed to load chapters:', error);
+        })
+        .finally(() => {
+          setIsLoadingChapters(false);
+        });
+    } else if (chapters.length > 0) {
+      setIsLoadingChapters(false);
     }
-  }, [currentAudiobookId, loadChaptersForAudiobook]);
+  }, [currentAudiobookId, loadChaptersForAudiobook, chapters.length]);
 
   // Chapter initialization is now handled by the audio store
 
@@ -126,19 +137,24 @@ export const Player: React.FC = () => {
     }
   };
 
-  // Show loading state if we have an ID but no matching audiobook yet
-  if (currentAudiobookId && !currentAudiobook) {
+  // Show loading state if we have an ID but no matching audiobook yet, OR if loading chapters
+  if ((currentAudiobookId && !currentAudiobook) || (currentAudiobookId && isLoadingChapters && chapters.length === 0)) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
-        <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4 animate-pulse">
-          <span className="text-2xl">⟳</span>
+      <div className="flex flex-col items-center justify-center h-screen text-gray-500 dark:text-gray-400">
+        <div className="w-20 h-20 relative mb-6">
+          <div className="absolute inset-0 rounded-full border-4 border-gray-200 dark:border-gray-700"></div>
+          <div className="absolute inset-0 rounded-full border-4 border-green-500 border-t-transparent animate-spin"></div>
         </div>
-        <h3 className="text-lg font-medium mb-2">Loading audiobook...</h3>
-        <p className="text-center">Please wait while we load your audiobook</p>
+        <h3 className="text-xl font-medium mb-2 text-gray-700 dark:text-gray-300">
+          {!currentAudiobook ? 'Loading audiobook...' : 'Loading chapters...'}
+        </h3>
+        <p className="text-center text-gray-500 dark:text-gray-400">
+          {!currentAudiobook ? 'Please wait while we load your audiobook' : 'Preparing your listening experience'}
+        </p>
       </div>
     );
   }
-  
+
   // Show no audiobook state if no current audiobook and no ID
   if (!currentAudiobook && !currentAudiobookId) {
     return (
@@ -152,7 +168,7 @@ export const Player: React.FC = () => {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Choose an audiobook from your library to start listening
             </p>
-            <button 
+            <button
               onClick={() => navigate('/library')}
               className="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-full font-medium transition-colors shadow-lg hover:shadow-xl"
             >

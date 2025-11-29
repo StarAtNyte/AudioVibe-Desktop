@@ -1005,19 +1005,29 @@ async fn create_chapters_for_existing_tts_audiobook(
         } else {
             format!("Chapter {} - Part {}", chapter_num, chunk_num)
         };
-        
+
+        // Extract duration and file size from the actual audio file
+        let (duration, file_size) = match extract_audio_metadata(file_path) {
+            Ok(info) => (info.duration.map(|d| d as i64), Some(info.file_size as i64)),
+            Err(e) => {
+                println!("⚠️ TTS: Could not extract metadata for {}: {}", chapter_title, e);
+                (None, None)
+            }
+        };
+
         let chapter_dto = CreateChapterDto {
             audiobook_id: audiobook.id.clone(),
             chapter_number: *unique_chapter_num,
             title: chapter_title.clone(),
             file_path: file_path.to_string_lossy().to_string(),
-            duration: None,
-            file_size: None,
+            duration,
+            file_size,
         };
-        
+
         match chapter_repo.create(chapter_dto).await {
             Ok(chapter) => {
-                println!("✅ TTS: Created missing chapter record: {}", chapter_title);
+                let duration_str = duration.map(|d| format!("{}s", d)).unwrap_or_else(|| "unknown".to_string());
+                println!("✅ TTS: Created missing chapter record: {} ({})", chapter_title, duration_str);
                 created_chapters.push(chapter);
             },
             Err(e) => {

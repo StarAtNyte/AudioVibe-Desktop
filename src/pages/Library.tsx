@@ -57,117 +57,45 @@ export const Library: React.FC = () => {
       console.log('Found audiobook:', audiobook.title);
       console.log('File path:', audiobook.file_path);
       
-      // Explicitly stop any currently playing audio before loading new one
-      try {
-        console.log('Stopping any currently playing audio...');
-        await stop();
-        console.log('Successfully stopped current audio');
-        // Wait a bit for stop operation to complete
-        await new Promise(resolve => setTimeout(resolve, 150));
-      } catch (stopError) {
-        console.warn('Failed to stop current audio (may not be playing):', stopError);
-      }
-      
-      // Always load the audio (this will stop any current audio automatically)
+      // Load the audio (loadAudio will handle stopping current audio internally)
       console.log('Loading audio...');
       console.log('File path:', audiobook.file_path);
-      console.log('Is directory?', audiobook.file_path.includes('/') || audiobook.file_path.includes('\\'));
-      
+
       try {
         await loadAudio(audiobook.file_path, audiobook.id);
         console.log('✅ loadAudio completed successfully');
       } catch (loadError) {
         console.error('❌ loadAudio failed:', loadError);
-        throw loadError; // Re-throw to be caught by main error handler
+        throw loadError;
       }
-      
-      // Wait for the audio to be fully loaded by checking the status
-      console.log('Waiting for audio to be ready...');
-      let attempts = 0;
-      const maxAttempts = 25; // Maximum wait time of 5 seconds (25 * 200ms)
-      
-      while (attempts < maxAttempts) {
-        // Get the current status to check if the audio is loaded
-        try {
-          await getStatus();
-          
-          const currentStatus = useAudioStore.getState().status;
-          console.log('Current status:', currentStatus);
-          
-          // Be more lenient with status checking - backend logs show audio loaded successfully
-          if (currentStatus.current_file) {
-            console.log('✅ Audio file is loaded, considering ready');
-            break;
-          }
-          
-          // Also accept if already playing (which means it loaded successfully)
-          if (currentStatus.state === 'Playing') {
-            console.log('✅ Audio is already playing, must be loaded');
-            break;
-          }
-          
-          // Check if we have a valid duration and current file
-          if (currentStatus.duration && currentStatus.duration > 0 && currentStatus.current_file) {
-            console.log('✅ Audio is ready with duration:', currentStatus.duration);
-            break;
-          }
-          
-        } catch (statusError) {
-          console.warn(`Status check attempt ${attempts + 1} failed, but continuing:`, statusError);
-          // Don't break - the audio might still be working
+
+      // Quick validation check - just verify audio is loaded
+      console.log('Quick validation check...');
+      try {
+        await getStatus();
+        const currentStatus = useAudioStore.getState().status;
+
+        // Quick check - if we have a current file, we're good to go
+        if (currentStatus.current_file) {
+          console.log('✅ Audio file confirmed loaded');
         }
-        
-        attempts++;
-        console.log(`Waiting for audio to load... attempt ${attempts}/${maxAttempts}`);
-        await new Promise(resolve => setTimeout(resolve, 300)); // Slightly longer delay
+      } catch (statusError) {
+        console.warn('Status check failed, but continuing:', statusError);
       }
-      
-      // Additional small delay to ensure backend is fully ready
-      await new Promise(resolve => setTimeout(resolve, 250));
-      
-      // Verify one more time that the audio is loaded
-      await getStatus();
-      const finalStatus = useAudioStore.getState().status;
-      console.log('Final status check:', finalStatus);
-      
-      // Since backend logs show everything worked, be more lenient with validation
-      if (!finalStatus.current_file) {
-        console.warn('No current_file found in status, but backend loaded successfully. Continuing anyway.');
-      }
-      
-      if (!finalStatus.duration || finalStatus.duration <= 0) {
-        console.warn('Duration not available in status, but backend loaded successfully. Continuing anyway.');
-      }
-      
+
+      // Start playback
       console.log('Starting playback...');
       try {
         await play();
         console.log('✅ Play command succeeded');
       } catch (playError) {
         console.warn('Play command failed, but continuing:', playError);
-        // Don't throw - the audio might still work
       }
-      
-      // Wait a moment and check the audio store state after play
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const audioStoreState = useAudioStore.getState();
-      console.log('🎵 Audio store state after play:', {
-        currentAudiobookId: audioStoreState.currentAudiobookId,
-        status: audioStoreState.status,
-        isPlayerVisible: audioStoreState.isPlayerVisible,
-        audioInfo: audioStoreState.audioInfo
-      });
-      
-      // Final success check based on backend logs
-      if (audioStoreState.status.state === 'Playing' || audioStoreState.currentAudiobookId) {
-        console.log('✅ SUCCESS: Audio confirmed playing or loaded, navigating to player');
-        navigate('/player');
-        console.log('=== LIBRARY PLAY COMPLETE ===');
-      } else {
-        console.log('⚠️ WARNING: Audio state unclear, but backend succeeded, navigating anyway');
-        navigate('/player');
-        console.log('=== LIBRARY PLAY COMPLETE (with warnings) ===');
-      }
+
+      // Navigate immediately - let the Player page handle the rest
+      console.log('✅ Navigating to player');
+      navigate('/player');
+      console.log('=== LIBRARY PLAY COMPLETE ===');
     } catch (error) {
       console.error('Failed to play audiobook:', error);
       console.error('Error details:', {
