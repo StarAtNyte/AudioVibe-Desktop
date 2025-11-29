@@ -24,6 +24,7 @@ interface LibraryViewProps {
   onImportDocument?: (audiobook: Audiobook) => void;
   onSelectAudiobook?: (id: string) => void;
   onBulkDelete?: (ids: string[]) => void;
+  onEditAudiobook?: (id: string) => void;
 }
 
 type SortField = 'title' | 'author' | 'duration' | 'dateAdded' | 'progress';
@@ -39,7 +40,8 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   onAddAudiobook,
   onImportDocument,
   onSelectAudiobook,
-  onBulkDelete
+  onBulkDelete,
+  onEditAudiobook
 }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
@@ -412,6 +414,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
                   onPlay={onPlay}
                   onPause={onPause}
                   onSelect={onSelectAudiobook}
+                  onEdit={onEditAudiobook}
                   viewMode={viewMode}
                   isSelectionMode={isSelectionMode}
                   isSelected={selectedBooks.has(audiobook.id)}

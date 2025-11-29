@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Clock, Play, Pause, MoreVertical, Trash2, Mic } from 'lucide-react';
+import { Clock, Play, Pause, MoreVertical, Trash2, Mic, Edit } from 'lucide-react';
 import { useCollectionStore, useLibraryStore } from '../../store';
 import { BookCover } from '../common/BookCover';
 
@@ -14,6 +14,7 @@ interface AudiobookCardProps {
   onPlay: (id: string) => void;
   onPause: () => void;
   onSelect?: (id: string) => void;
+  onEdit?: (id: string) => void;
   viewMode: 'grid' | 'list';
   // Bulk selection props
   isSelectionMode?: boolean;
@@ -35,6 +36,7 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
   onPlay,
   onPause,
   onSelect,
+  onEdit,
   viewMode,
   isSelectionMode = false,
   isSelected = false,
@@ -145,13 +147,22 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
     }
   };
 
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setShowContextMenu(false);
+    if (onEdit) {
+      onEdit(id);
+    }
+  };
+
   const handleDelete = async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-    
+
     // Close the context menu first to prevent any interference
     setShowContextMenu(false);
-    
+
     // Use setTimeout to ensure the menu is closed and events are settled
     setTimeout(() => {
       if (window.confirm(`Are you sure you want to delete "${title}" from your library?\n\nThis action cannot be undone.`)) {
@@ -322,9 +333,16 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
                     </button>
                   ))
                 )}
-                
-                {/* Delete Section */}
+
+                {/* Edit & Delete Section */}
                 <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
+                  <button
+                    onClick={handleEdit}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                  >
+                    <Edit size={14} />
+                    <span>Edit Details</span>
+                  </button>
                   <button
                     onClick={handleDelete}
                     className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-2"
@@ -471,9 +489,16 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
                       </button>
                     ))
                   )}
-                  
-                  {/* Delete Section */}
+
+                  {/* Edit & Delete Section */}
                   <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
+                    <button
+                      onClick={handleEdit}
+                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                    >
+                      <Edit size={14} />
+                      <span>Edit Details</span>
+                    </button>
                     <button
                       onClick={handleDelete}
                       className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-2"

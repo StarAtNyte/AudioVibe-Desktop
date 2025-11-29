@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LibraryView, AddAudiobookModal } from '../components/library';
+import { EditAudiobookModal } from '../components/library/EditAudiobookModal';
 import { useLibraryStore, useAudioStore } from '../store';
+import { Audiobook } from '../types';
 
 export const Library: React.FC = () => {
   const navigate = useNavigate();
@@ -17,6 +19,8 @@ export const Library: React.FC = () => {
 
   const { currentAudiobookId, loadAudio, play, pause, stop, status, getStatus } = useAudioStore();
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingAudiobook, setEditingAudiobook] = useState<Audiobook | null>(null);
 
   // Fetch audiobooks on component mount
   useEffect(() => {
@@ -300,20 +304,35 @@ export const Library: React.FC = () => {
   const handleBulkDelete = async (ids: string[]) => {
     try {
       console.log('Bulk deleting audiobooks:', ids);
-      
+
       // Delete each audiobook
       for (const id of ids) {
         await deleteAudiobook(id);
       }
-      
+
       console.log(`✅ Successfully deleted ${ids.length} audiobooks`);
-      
+
       // Refresh the library
       await fetchAudiobooks();
     } catch (error) {
       console.error('Failed to delete audiobooks:', error);
       alert(`Failed to delete audiobooks. Please try again.`);
     }
+  };
+
+  const handleEditAudiobook = (id: string) => {
+    const audiobook = audiobooks.find(book => book.id === id);
+    if (audiobook) {
+      setEditingAudiobook(audiobook);
+      setShowEditModal(true);
+    }
+  };
+
+  const handleCloseEditModal = async () => {
+    setShowEditModal(false);
+    setEditingAudiobook(null);
+    // Refresh the library to show updated data
+    await fetchAudiobooks();
   };
 
   const handleImportDocument = async (audiobook: any) => {
@@ -377,6 +396,7 @@ export const Library: React.FC = () => {
         onImportDocument={handleImportDocument}
         onSelectAudiobook={handleSelectAudiobook}
         onBulkDelete={handleBulkDelete}
+        onEditAudiobook={handleEditAudiobook}
       />
 
       <AddAudiobookModal
@@ -385,6 +405,14 @@ export const Library: React.FC = () => {
         onAddFiles={handleAddFiles}
         onAddFolder={handleAddFolder}
       />
+
+      {editingAudiobook && (
+        <EditAudiobookModal
+          isOpen={showEditModal}
+          onClose={handleCloseEditModal}
+          audiobook={editingAudiobook}
+        />
+      )}
     </>
   );
 };

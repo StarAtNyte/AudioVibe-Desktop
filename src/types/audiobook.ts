@@ -97,6 +97,15 @@ export interface CreateAudiobookDto {
   genre?: string;
 }
 
+export interface UpdateAudiobookDto {
+  title?: string;
+  author?: string;
+  narrator?: string;
+  description?: string;
+  genre?: string;
+  cover_image_path?: string;
+}
+
 export interface UpdatePlaybackProgressDto {
   position: number;
   chapter_index?: number;

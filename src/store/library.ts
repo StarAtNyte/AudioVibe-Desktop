@@ -1,6 +1,17 @@
 import { create } from 'zustand';
-import { Audiobook, Collection, CreateAudiobookDto, CreateCollectionDto } from '../types';
+import { Audiobook, Collection, CreateAudiobookDto, CreateCollectionDto, UpdateAudiobookDto } from '../types';
 import { useAudioStore } from './audio';
+
+// Helper function to parse duration strings like "11h 35m" to seconds
+function parseDuration(durationStr: string): number {
+  const hourMatch = durationStr.match(/(\d+)h/);
+  const minuteMatch = durationStr.match(/(\d+)m/);
+
+  const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+  const minutes = minuteMatch ? parseInt(minuteMatch[1]) : 0;
+
+  return (hours * 3600) + (minutes * 60);
+}
 
 interface LibraryState {
   // Data
@@ -33,6 +44,7 @@ interface LibraryState {
   fetchAudiobooks: () => Promise<void>;
   searchAudiobooks: (query: string) => Promise<void>;
   createAudiobook: (dto: CreateAudiobookDto) => Promise<void>;
+  updateAudiobook: (id: string, dto: UpdateAudiobookDto) => Promise<void>;
   deleteAudiobook: (id: string) => Promise<void>;
   
   // Collection actions
@@ -123,7 +135,27 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
         console.log('Using local mock data for audiobooks');
         const { localBooksDatabase } = await import('../data/localBooks');
         console.log('📚 LOCAL DATA - Loaded audiobooks:', localBooksDatabase.length);
-        localBooksDatabase.forEach((book, index) => {
+
+        // Convert LocalBook to Audiobook format
+        const audiobooks: Audiobook[] = localBooksDatabase.map((book) => ({
+          id: book.id,
+          title: book.title,
+          author: book.author,
+          narrator: book.narrator,
+          duration: book.duration ? parseDuration(book.duration) : undefined,
+          file_path: '', // No local file path for recommendations
+          cover_image_path: book.coverUrl,
+          description: book.description,
+          genre: book.genre,
+          publish_date: book.year,
+          added_date: new Date().toISOString(),
+          file_size: book.fileSize,
+          chapters_count: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+
+        audiobooks.forEach((book, index) => {
           console.log(`📖 Local Audiobook ${index + 1}:`, {
             id: book.id,
             title: book.title,
@@ -131,7 +163,7 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
             genre: book.genre
           });
         });
-        set({ audiobooks: localBooksDatabase });
+        set({ audiobooks });
       }
     } catch (error) {
       console.error('Failed to fetch audiobooks:', error);
@@ -166,10 +198,10 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
     try {
       setLoading(true);
       setError(null);
-      
+
       const tauriCore = await import('@tauri-apps/api/core');
       await tauriCore.invoke('create_audiobook', { dto });
-      
+
       // Refresh the list
       await fetchAudiobooks();
     } catch (error) {
@@ -180,7 +212,37 @@ export const useLibraryStore = create<LibraryState>((set, get) => ({
       setLoading(false);
     }
   },
-  
+
+  updateAudiobook: async (id: string, dto: UpdateAudiobookDto) => {
+    const { setLoading, setError, fetchAudiobooks } = get();
+    try {
+      setLoading(true);
+      setError(null);
+
+      const tauriCore = await import('@tauri-apps/api/core');
+
+      // Convert the DTO to a HashMap<String, String> for the backend
+      const updates: Record<string, string> = {};
+      if (dto.title !== undefined) updates.title = dto.title;
+      if (dto.author !== undefined) updates.author = dto.author;
+      if (dto.narrator !== undefined) updates.narrator = dto.narrator;
+      if (dto.description !== undefined) updates.description = dto.description;
+      if (dto.genre !== undefined) updates.genre = dto.genre;
+      if (dto.cover_image_path !== undefined) updates.cover_image_path = dto.cover_image_path;
+
+      await tauriCore.invoke('update_audiobook', { audiobookId: id, updates });
+
+      // Refresh the list
+      await fetchAudiobooks();
+    } catch (error) {
+      console.error('Failed to update audiobook:', error);
+      setError(error instanceof Error ? error.message : 'Failed to update audiobook');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  },
+
   deleteAudiobook: async (id: string) => {
     const { setLoading, setError, fetchAudiobooks } = get();
     try {
