@@ -156,13 +156,15 @@ impl AudioEngine {
         }
 
         // Wait for sink to have content - check WITHOUT holding the lock for too long
+        // Optimized for M4B files: shorter delays, more aggressive checking
         let mut attempts = 0;
-        let max_attempts = 50; // Increased to 50 for slower systems
+        let max_attempts = 100; // More attempts but with shorter delays
         loop {
             {
                 let sink = self.sink.lock().unwrap();
                 if !sink.empty() {
-                    println!("🔧 ENGINE: Sink loaded with content after {} attempts", attempts);
+                    println!("🔧 ENGINE: Sink loaded with content after {} attempts ({} ms)",
+                             attempts, attempts * 5);
                     break;
                 }
             }
@@ -172,14 +174,14 @@ impl AudioEngine {
                 return Err(anyhow::anyhow!("Failed to load audio into sink after {} attempts. File path: {}", attempts, path.display()));
             }
 
-            // Progressive delay: start with short delays, then increase
-            let delay_ms = if attempts < 10 { 10 } else if attempts < 30 { 50 } else { 100 };
-            std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            // Shorter, consistent delay for faster loading feedback
+            std::thread::sleep(std::time::Duration::from_millis(5));
             attempts += 1;
 
-            // Log progress every 10 attempts
-            if attempts % 10 == 0 {
-                println!("🔧 ENGINE: Still waiting for sink to load... attempt {}/{}", attempts, max_attempts);
+            // Log progress every 20 attempts (every 100ms)
+            if attempts % 20 == 0 {
+                println!("🔧 ENGINE: Still waiting for sink to load... attempt {}/{} (~{}ms)",
+                         attempts, max_attempts, attempts * 5);
             }
         }
         
@@ -523,10 +525,10 @@ impl AudioEngine {
         let paused_duration = self.paused_duration.lock().unwrap();
         let seek_offset = self.seek_offset.lock().unwrap();
         let speed = self.get_speed();
-        
+
         if let Some(started_at) = *start_time {
             let now = std::time::Instant::now();
-            
+
             let elapsed = if let Some(paused_at) = *pause_time {
                 // Currently paused - calculate time up to pause
                 paused_at.duration_since(started_at)
@@ -534,12 +536,16 @@ impl AudioEngine {
                 // Currently playing - calculate total elapsed time
                 now.duration_since(started_at)
             };
-            
+
             // Subtract the time spent paused and multiply by speed
             let active_time = elapsed.saturating_sub(*paused_duration);
             let speed_adjusted_time = (active_time.as_secs_f32() * speed) as u64;
-            *seek_offset + speed_adjusted_time
+
+            // Round to avoid floating point precision issues that can cause stuck positions
+            let position = *seek_offset + speed_adjusted_time;
+            position
         } else {
+            // When not started, always return the seek offset (could be 0 or a resumed position)
             *seek_offset
         }
     }

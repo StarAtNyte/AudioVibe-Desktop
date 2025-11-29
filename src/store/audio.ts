@@ -185,8 +185,17 @@ export const useAudioStore = create<AudioState>()(
         
         // Verify that the audio is actually loaded by getting the status
         try {
+          // Get initial status multiple times to ensure accurate position
+          // This helps avoid the "stuck at 0:01" issue with M4B files
           await newState.getStatus();
-          console.log('Audio store: Status updated after loading');
+          console.log('Audio store: Initial status updated after loading');
+
+          // Wait a bit for the decoder to stabilize, especially important for M4B
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Get status again to verify stable position
+          await newState.getStatus();
+          console.log('Audio store: Verified status after loading');
 
           // Start progress updates to ensure time display works immediately
           // This will update the duration and position even if not playing yet
@@ -289,23 +298,24 @@ export const useAudioStore = create<AudioState>()(
         set(state => ({
           status: { ...state.status, state: 'Playing' }
         }));
-        
+
         console.log('Calling play_audio...');
         // Play audio with minimal delay
         await tauriCore.invoke('play_audio');
         console.log('play_audio completed successfully');
-        
-        // Start progress updates immediately
+
+        // Start progress updates immediately for smoother M4B playback
         get().startProgressUpdates();
-        
+
         console.log('Play operation completed successfully');
-        
-        // Update status in background to confirm
-        setTimeout(() => {
-          get().getStatus().catch(error => {
-            console.warn('Failed to get status after play:', error);
-          });
-        }, 50);
+
+        // Update status immediately to sync with backend
+        try {
+          await get().getStatus();
+          console.log('Status synchronized after play');
+        } catch (error) {
+          console.warn('Failed to get status after play:', error);
+        }
         
       } catch (error) {
         console.error('Failed to play audio:', error);
@@ -461,14 +471,15 @@ export const useAudioStore = create<AudioState>()(
         clearInterval(interpolationInterval);
       }
 
-      // Fetch actual position from backend every second
+      // Fetch actual position from backend more frequently for M4B files
+      // 500ms polling provides better responsiveness while still being efficient
       progressInterval = setInterval(async () => {
         try {
           await get().getStatus();
         } catch (error) {
           console.warn('Failed to get audio status:', error);
         }
-      }, 1000);
+      }, 500) as unknown as number;
 
       // Smooth interpolation at 60fps for visual updates
       interpolationInterval = setInterval(() => {
@@ -483,8 +494,9 @@ export const useAudioStore = create<AudioState>()(
           // Calculate interpolated position
           const interpolatedPosition = lastServerPosition + (timeSinceLastUpdate * speed);
 
-          // Only update if the difference is significant (avoid unnecessary re-renders)
-          if (Math.abs(interpolatedPosition - state.status.position) > 0.05) {
+          // More aggressive update threshold for M4B files to show immediate progress
+          // Reduced from 0.05s to 0.01s for smoother visual updates
+          if (Math.abs(interpolatedPosition - state.status.position) > 0.01) {
             set({
               status: {
                 ...state.status,
@@ -493,7 +505,7 @@ export const useAudioStore = create<AudioState>()(
             });
           }
         }
-      }, 16); // ~60fps for smooth updates
+      }, 16) as unknown as number; // ~60fps for smooth updates
     },
 
     stopProgressUpdates: () => {
