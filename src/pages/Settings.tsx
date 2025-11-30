@@ -355,15 +355,15 @@ export const Settings: React.FC = () => {
           <div className="space-y-3">
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Version</span>
-              <span className="text-gray-900 dark:text-gray-100">1.0.0</span>
+              <span className="text-gray-900 dark:text-gray-100">0.3.0 Pre-Release</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Build</span>
-              <span className="text-gray-900 dark:text-gray-100">2024.01.01</span>
+              <span className="text-gray-900 dark:text-gray-100">2025.11.30</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-600 dark:text-gray-400">Platform</span>
-              <span className="text-gray-900 dark:text-gray-100">Desktop</span>
+              <span className="text-gray-900 dark:text-gray-100">Windows Desktop</span>
             </div>
           </div>
 

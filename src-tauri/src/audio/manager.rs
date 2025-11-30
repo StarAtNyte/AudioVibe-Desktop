@@ -69,29 +69,10 @@ impl AudioManager {
     /// Play the currently loaded track
     pub fn play(&self) -> Result<()> {
         log::info!("🎵 MANAGER: Starting playback");
-        
-        // Try to play, and if it fails due to empty sink, reload and try again
-        match self.engine.play() {
-            Ok(()) => Ok(()),
-            Err(_) => {
-                log::warn!("🎵 MANAGER: Play failed, attempting to reload current track");
-                // Get the current track info to reload
-                let current_track = {
-                    let track_lock = self.current_track.lock().unwrap();
-                    track_lock.clone()
-                };
-                
-                if let Some(track) = current_track {
-                    log::info!("🎵 MANAGER: Reloading track: {}", track.file_path);
-                    // Reload the file and try to play again
-                    self.engine.load_file(&track.file_path)?;
-                    self.engine.play()
-                } else {
-                    log::error!("🎵 MANAGER: No current track to reload");
-                    Err(anyhow::anyhow!("No current track loaded"))
-                }
-            }
-        }
+
+        // Try to play - no automatic reload on failure
+        // Reloading resets timing state which causes position to get stuck at 0:00
+        self.engine.play()
     }
 
     /// Pause the current track

@@ -456,6 +456,8 @@ export const useAudioStore = create<AudioState>()(
         lastServerPosition = status.position;
         lastServerTimestamp = Date.now();
 
+        console.log('📊 [STATUS] Updated from backend - position:', status.position, 'state:', status.state, 'duration:', status.duration);
+
         set({ status });
       } catch (error) {
         console.error('Failed to get status:', error);
@@ -463,23 +465,32 @@ export const useAudioStore = create<AudioState>()(
     },
 
     startProgressUpdates: () => {
+      console.log('🔄 [PROGRESS] startProgressUpdates called');
+
       // Clear any existing intervals
       if (progressInterval) {
+        console.log('🔄 [PROGRESS] Clearing existing progress interval:', progressInterval);
         clearInterval(progressInterval);
       }
       if (interpolationInterval) {
+        console.log('🔄 [PROGRESS] Clearing existing interpolation interval:', interpolationInterval);
         clearInterval(interpolationInterval);
       }
 
       // Fetch actual position from backend more frequently for M4B files
       // 500ms polling provides better responsiveness while still being efficient
       progressInterval = setInterval(async () => {
+        console.log('🔄 [PROGRESS] 500ms polling tick - fetching status from backend');
         try {
           await get().getStatus();
+          const state = get();
+          console.log('🔄 [PROGRESS] Got status - state:', state.status.state, 'position:', state.status.position);
         } catch (error) {
           console.warn('Failed to get audio status:', error);
         }
       }, 500) as unknown as number;
+
+      console.log('🔄 [PROGRESS] Created progress interval:', progressInterval);
 
       // Smooth interpolation at 60fps for visual updates
       interpolationInterval = setInterval(() => {
@@ -497,6 +508,7 @@ export const useAudioStore = create<AudioState>()(
           // More aggressive update threshold for M4B files to show immediate progress
           // Reduced from 0.05s to 0.01s for smoother visual updates
           if (Math.abs(interpolatedPosition - state.status.position) > 0.01) {
+            console.log('🔄 [PROGRESS] Interpolating position:', state.status.position, '→', interpolatedPosition);
             set({
               status: {
                 ...state.status,
@@ -506,17 +518,24 @@ export const useAudioStore = create<AudioState>()(
           }
         }
       }, 16) as unknown as number; // ~60fps for smooth updates
+
+      console.log('🔄 [PROGRESS] Created interpolation interval:', interpolationInterval);
+      console.log('🔄 [PROGRESS] Progress updates started successfully');
     },
 
     stopProgressUpdates: () => {
+      console.log('🛑 [PROGRESS] stopProgressUpdates called');
       if (progressInterval) {
+        console.log('🛑 [PROGRESS] Stopping progress interval:', progressInterval);
         clearInterval(progressInterval);
         progressInterval = null;
       }
       if (interpolationInterval) {
+        console.log('🛑 [PROGRESS] Stopping interpolation interval:', interpolationInterval);
         clearInterval(interpolationInterval);
         interpolationInterval = null;
       }
+      console.log('🛑 [PROGRESS] Progress updates stopped');
     },
 
     // Chapter navigation functions

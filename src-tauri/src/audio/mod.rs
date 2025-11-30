@@ -152,7 +152,10 @@ impl AudioEngine {
             let sink = self.sink.lock().unwrap();
             println!("🔧 ENGINE: Appending source to sink");
             sink.append(source);
-            println!("🔧 ENGINE: After append, sink empty: {}", sink.empty());
+            // Pause immediately after append to prevent auto-play
+            // This ensures timing (start_time) is only set when play() is explicitly called
+            sink.pause();
+            println!("🔧 ENGINE: After append, sink empty: {}, paused to prevent auto-play", sink.empty());
         }
 
         // Wait for sink to have content - check WITHOUT holding the lock for too long

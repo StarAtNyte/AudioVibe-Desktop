@@ -25,6 +25,7 @@ export const Player: React.FC = () => {
 
   const [lastManualChapterSelection, setLastManualChapterSelection] = useState<number>(0);
   const [isLoadingChapters, setIsLoadingChapters] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
 
   // Extract values from status
   const isPlaying = status.state === 'Playing';
@@ -32,22 +33,33 @@ export const Player: React.FC = () => {
   const duration = status.duration || 0;
 
   // Cleanup progress updates on unmount
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     return () => {
       stopProgressUpdates();
     };
-  }, [stopProgressUpdates]);
-  
+  }, []); // Empty deps - only run on mount/unmount
+
   // Get current audiobook from library
   const currentAudiobook = currentAudiobookId ? audiobooks.find(book => book.id === currentAudiobookId) : null;
+
+  // Mark initial load as complete once we have audiobooks
+  useEffect(() => {
+    if (audiobooks.length > 0) {
+      setIsInitialLoad(false);
+    }
+  }, [audiobooks.length]);
   
   // Refetch audiobooks if we have an ID but no matching audiobook
+  // Also ensure audiobooks are loaded on mount if we have an ID
   useEffect(() => {
-    if (currentAudiobookId && !currentAudiobook && audiobooks.length === 0) {
-      console.log('Player: Refetching audiobooks because currentAudiobookId exists but no audiobook found');
-      fetchAudiobooks();
+    if (currentAudiobookId) {
+      if (!currentAudiobook) {
+        console.log('Player: Loading audiobooks because audiobook not found for ID:', currentAudiobookId);
+        fetchAudiobooks();
+      }
     }
-  }, [currentAudiobookId, currentAudiobook, audiobooks.length, fetchAudiobooks]);
+  }, [currentAudiobookId, currentAudiobook, fetchAudiobooks]);
 
   // Load chapters when audiobook changes (non-blocking)
   useEffect(() => {
@@ -137,8 +149,16 @@ export const Player: React.FC = () => {
     }
   };
 
-  // Show loading state if we have an ID but no matching audiobook yet, OR if loading chapters
-  if ((currentAudiobookId && !currentAudiobook) || (currentAudiobookId && isLoadingChapters && chapters.length === 0)) {
+  // Show loading state in these cases:
+  // 1. Initial load and we're still fetching audiobooks
+  // 2. We have an audiobook ID but haven't found the audiobook data yet
+  // 3. We have both ID and audiobook, but chapters are still loading (and array is empty)
+  const shouldShowLoading =
+    (currentAudiobookId && isInitialLoad) ||
+    (currentAudiobookId && !currentAudiobook) ||
+    (currentAudiobookId && currentAudiobook && isLoadingChapters && chapters.length === 0);
+
+  if (shouldShowLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen text-gray-500 dark:text-gray-400">
         <div className="w-20 h-20 relative mb-6">

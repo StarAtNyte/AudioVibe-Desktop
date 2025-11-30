@@ -92,7 +92,11 @@ export const Library: React.FC = () => {
         console.warn('Play command failed, but continuing:', playError);
       }
 
-      // Navigate immediately - let the Player page handle the rest
+      // Small delay to ensure React state updates propagate
+      // This prevents the "No audiobook selected" flash
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Navigate to player - the loading state will show if needed
       console.log('✅ Navigating to player');
       navigate('/player');
       console.log('=== LIBRARY PLAY COMPLETE ===');
