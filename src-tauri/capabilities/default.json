@@ -19,6 +19,19 @@
     "opener:default",
     "dialog:allow-open",
     "dialog:allow-message",
-    "dialog:default"
+    "dialog:default",
+    "http:default",
+    "http:allow-fetch",
+    {
+      "identifier": "http:allow-fetch-read-body",
+      "allow": [
+        {
+          "url": "https://archive.org/*"
+        },
+        {
+          "url": "https://*.archive.org/*"
+        }
+      ]
+    }
   ]
 }
