@@ -119,7 +119,7 @@ export const EPUBReader: React.FC = () => {
     // Apply styles directly to all iframe documents using CSS injection
     const applyStylesToIframes = () => {
       try {
-        const contents = renditionRef.current?.getContents();
+        const contents = renditionRef.current?.getContents() as any;
         if (contents && contents.length > 0) {
           console.log(`Applying styles to ${contents.length} iframe(s)`);
           contents.forEach((content: any, index: number) => {
@@ -493,8 +493,8 @@ export const EPUBReader: React.FC = () => {
           }
 
           // Get actual total pages from generated locations
-          if (book.locations && book.locations.total > 0) {
-            const totalPagesNum = book.locations.total;
+          if (book.locations && (book.locations as any).total > 0) {
+            const totalPagesNum = (book.locations as any).total;
             setTotalPagesCount(totalPagesNum);
             setTotalPages(totalPagesNum);
             console.log('Total pages set to:', totalPagesNum);
@@ -536,8 +536,8 @@ export const EPUBReader: React.FC = () => {
           console.log('EPUBReader: Locations generated');
 
           // Set total pages from generated locations
-          if (book.locations && book.locations.total > 0) {
-            const totalPagesNum = book.locations.total;
+          if (book.locations && (book.locations as any).total > 0) {
+            const totalPagesNum = (book.locations as any).total;
             setTotalPagesCount(totalPagesNum);
             setTotalPages(totalPagesNum);
             console.log('Total pages set from locations:', totalPagesNum);
