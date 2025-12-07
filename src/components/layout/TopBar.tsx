@@ -12,7 +12,9 @@ import {
   Square2StackIcon,
   XMarkIcon,
   ArrowDownTrayIcon,
-  Bars3Icon
+  Bars3Icon,
+  MusicalNoteIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { invoke } from '@tauri-apps/api/core';
 import { useAppStore } from '../../store';
@@ -78,7 +80,7 @@ export const TopBar: React.FC = () => {
           {(isMobile || isTablet) && (
             <button
               onClick={() => setLeftSidebarOpen(!leftSidebarOpen)}
-              className="w-8 h-8 flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-200/30 dark:hover:bg-gray-700/30 rounded-full transition-all duration-200"
+              className="w-9 h-9 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100/50 dark:bg-gray-800/50 hover:bg-gray-200/80 dark:hover:bg-gray-700/80 border border-gray-300/50 dark:border-gray-700/50 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md"
               title="Toggle Menu"
             >
               <Bars3Icon className="w-5 h-5" />
@@ -145,26 +147,36 @@ export const TopBar: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={`
-                  w-full pl-10 pr-4 
-                  ${isMobile ? 'py-2' : 'py-3'} 
-                  bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full 
-                  text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 
-                  ${isMobile ? 'text-sm' : 'text-sm'} 
-                  focus:outline-none focus:border-green-500 focus:bg-gray-50 dark:focus:bg-gray-700 
+                  w-full pl-10 pr-4
+                  ${isMobile ? 'py-2' : 'py-3'}
+                  bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-full
+                  text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400
+                  ${isMobile ? 'text-sm' : 'text-sm'}
+                  focus:outline-none focus:border-green-500 focus:bg-gray-50 dark:focus:bg-gray-700
                   transition-all duration-200 hover:bg-gray-50 dark:hover:bg-gray-700
                 `}
               />
             </form>
           </div>
 
+          {/* Audiobook and Ebook Library Icons */}
           {!isMobile && (
-            <button
-              onClick={() => navigate('/library')}
-              className="w-8 h-8 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
-              title="Your Library"
-            >
-              <BookOpenIcon className="w-5 h-5" />
-            </button>
+            <div className="flex items-center space-x-1">
+              <button
+                onClick={() => navigate('/library')}
+                className="w-8 h-8 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                title="Audiobooks Library"
+              >
+                <MusicalNoteIcon className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => navigate('/ebooks')}
+                className="w-8 h-8 bg-gray-200 dark:bg-gray-800 rounded-full flex items-center justify-center text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors flex-shrink-0"
+                title="Ebooks Library"
+              >
+                <DocumentTextIcon className="w-5 h-5" />
+              </button>
+            </div>
           )}
         </div>
 

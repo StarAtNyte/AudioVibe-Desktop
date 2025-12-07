@@ -90,12 +90,12 @@ impl AudioEngine {
 
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path.as_ref();
-        println!("🔧 ENGINE: Starting load_file for: {}", path.display());
+        println!("ENGINE: Starting load_file for: {}", path.display());
 
         // Forcefully stop and drain all audio from the sink
         {
             let sink = self.sink.lock().unwrap();
-            println!("🔧 ENGINE: Stopping sink, currently empty: {}", sink.empty());
+            println!("ENGINE: Stopping sink, currently empty: {}", sink.empty());
             sink.stop();
 
             // Wait for sink to be empty and fully drained
@@ -104,11 +104,11 @@ impl AudioEngine {
                 sink.skip_one();
                 cleared_count += 1;
             }
-            println!("🔧 ENGINE: Cleared {} items from sink", cleared_count);
+            println!("ENGINE: Cleared {} items from sink", cleared_count);
 
             // Additional drain to ensure complete stop and resource cleanup
             std::thread::sleep(std::time::Duration::from_millis(100)); // Increased from 50ms
-            println!("🔧 ENGINE: Sink fully drained");
+            println!("ENGINE: Sink fully drained");
         }
 
         // Extract metadata in parallel if possible (but don't block loading)
@@ -130,19 +130,19 @@ impl AudioEngine {
         let file = File::open(path)
             .with_context(|| format!("Failed to open audio file: {}", path.display()))?;
 
-        println!("🔧 ENGINE: Attempting to decode file with Rodio Decoder (seekable mode)");
+        println!("ENGINE: Attempting to decode file with Rodio Decoder (seekable mode)");
 
         // Use Decoder::try_from for seekable sources in Rodio 0.21
         // This properly supports M4B files with seeking capability
         let source = match Decoder::try_from(file) {
             Ok(decoder) => {
-                println!("🔧 ENGINE: Successfully created decoder with seeking support");
+                println!("ENGINE: Successfully created decoder with seeking support");
                 decoder
             }
             Err(e) => {
-                eprintln!("❌ ENGINE: Failed to create decoder: {:?}", e);
-                eprintln!("❌ ENGINE: File path: {}", path.display());
-                eprintln!("❌ ENGINE: File extension: {:?}", path.extension());
+                eprintln!("ENGINE: Failed to create decoder: {:?}", e);
+                eprintln!("ENGINE: File path: {}", path.display());
+                eprintln!("ENGINE: File extension: {:?}", path.extension());
 
                 return Err(anyhow::anyhow!("Failed to decode audio file '{}': {:?}", path.display(), e));
             }
@@ -150,12 +150,12 @@ impl AudioEngine {
 
         {
             let sink = self.sink.lock().unwrap();
-            println!("🔧 ENGINE: Appending source to sink");
+            println!("ENGINE: Appending source to sink");
             sink.append(source);
             // Pause immediately after append to prevent auto-play
             // This ensures timing (start_time) is only set when play() is explicitly called
             sink.pause();
-            println!("🔧 ENGINE: After append, sink empty: {}, paused to prevent auto-play", sink.empty());
+            println!("ENGINE: After append, sink empty: {}, paused to prevent auto-play", sink.empty());
         }
 
         // Wait for sink to have content - check WITHOUT holding the lock for too long
@@ -166,14 +166,14 @@ impl AudioEngine {
             {
                 let sink = self.sink.lock().unwrap();
                 if !sink.empty() {
-                    println!("🔧 ENGINE: Sink loaded with content after {} attempts ({} ms)",
+                    println!("ENGINE: Sink loaded with content after {} attempts ({} ms)",
                              attempts, attempts * 5);
                     break;
                 }
             }
 
             if attempts >= max_attempts {
-                println!("❌ ENGINE: Sink still empty after {} attempts, file may be corrupted or unsupported", attempts);
+                println!("ENGINE: Sink still empty after {} attempts, file may be corrupted or unsupported", attempts);
                 return Err(anyhow::anyhow!("Failed to load audio into sink after {} attempts. File path: {}", attempts, path.display()));
             }
 
@@ -183,7 +183,7 @@ impl AudioEngine {
 
             // Log progress every 20 attempts (every 100ms)
             if attempts % 20 == 0 {
-                println!("🔧 ENGINE: Still waiting for sink to load... attempt {}/{} (~{}ms)",
+                println!("ENGINE: Still waiting for sink to load... attempt {}/{} (~{}ms)",
                          attempts, max_attempts, attempts * 5);
             }
         }
@@ -214,35 +214,35 @@ impl AudioEngine {
             *speed_adjusted_duration = std::time::Duration::ZERO;
         }
         
-        println!("🔧 ENGINE: Load complete, sink has content confirmed");
+        println!("ENGINE: Load complete, sink has content confirmed");
         log::info!("Loaded audio file: {}", path.display());
         Ok(())
     }
 
     pub fn play(&self) -> Result<()> {
-        log::info!("🟢 PLAY: Starting audio playback");
+        log::info!("PLAY: Starting audio playback");
         
         // Check if sink has content, with retry logic
         {
             let sink = self.sink.lock().unwrap();
             if sink.empty() {
-                log::warn!("🟢 PLAY: No audio file loaded in sink, will retry");
+                log::warn!("PLAY: No audio file loaded in sink, will retry");
                 // Release the lock and wait, then try again
                 drop(sink);
                 std::thread::sleep(std::time::Duration::from_millis(25));
                 let sink = self.sink.lock().unwrap();
                 if sink.empty() {
-                    log::warn!("🟢 PLAY: Still no audio file loaded after retry, delegating to manager");
+                    log::warn!("PLAY: Still no audio file loaded after retry, delegating to manager");
                     return Err(anyhow::anyhow!("No audio file loaded"));
                 }
-                log::info!("🟢 PLAY: Audio found after retry");
+                log::info!("PLAY: Audio found after retry");
             }
         }
         
         // Start playback with a fresh lock
         {
             let sink = self.sink.lock().unwrap();
-            log::info!("🟢 PLAY: Sink has audio, calling sink.play()");
+            log::info!("PLAY: Sink has audio, calling sink.play()");
             sink.play();
         }
         
@@ -267,7 +267,7 @@ impl AudioEngine {
         let mut state = self.state.lock().unwrap();
         *state = PlaybackState::Playing;
         
-        log::info!("🟢 PLAY: Audio playback started successfully");
+        log::info!("PLAY: Audio playback started successfully");
         Ok(())
     }
 
@@ -286,9 +286,9 @@ impl AudioEngine {
     }
 
     pub fn stop(&self) {
-        log::info!("🔴 STOP: Stopping audio engine");
+        log::info!("STOP: Stopping audio engine");
         let sink = self.sink.lock().unwrap();
-        log::info!("🔴 STOP: Got sink lock, calling sink.stop()");
+        log::info!("STOP: Got sink lock, calling sink.stop()");
         sink.stop();
         
         // Clear the sink queue to ensure no audio remains
@@ -297,7 +297,7 @@ impl AudioEngine {
             sink.skip_one();
             cleared_count += 1;
         }
-        log::info!("🔴 STOP: Cleared {} items from sink queue", cleared_count);
+        log::info!("STOP: Cleared {} items from sink queue", cleared_count);
         
         // Reset timing
         {
@@ -318,7 +318,7 @@ impl AudioEngine {
         let mut state = self.state.lock().unwrap();
         *state = PlaybackState::Stopped;
         
-        log::info!("🔴 STOP: Audio engine stopped and cleared completely");
+        log::info!("STOP: Audio engine stopped and cleared completely");
     }
 
     pub fn seek(&self, position_seconds: f32) -> Result<()> {
@@ -332,7 +332,7 @@ impl AudioEngine {
             return Err(anyhow::anyhow!("No audio file loaded to seek in"));
         }
 
-        log::info!("🔧 SEEK: Attempting to seek to {}s", position_seconds);
+        log::info!("SEEK: Attempting to seek to {}s", position_seconds);
         
         // Try native seeking first (rodio 0.19+ feature)
         {
@@ -353,15 +353,15 @@ impl AudioEngine {
                     let mut paused_duration = self.paused_duration.lock().unwrap();
                     *paused_duration = std::time::Duration::ZERO;
                     
-                    log::info!("🔧 SEEK: Native seek successful to {}s", position_seconds);
+                    log::info!("SEEK: Native seek successful to {}s", position_seconds);
                     return Ok(());
                 },
                 Err(rodio::source::SeekError::NotSupported { .. }) => {
-                    log::warn!("🔧 SEEK: Native seek not supported for this format, falling back to file reload");
+                    log::warn!("SEEK: Native seek not supported for this format, falling back to file reload");
                     // Fall through to fallback method
                 },
                 Err(e) => {
-                    log::warn!("🔧 SEEK: Native seek failed with error: {:?}, falling back to file reload", e);
+                    log::warn!("SEEK: Native seek failed with error: {:?}, falling back to file reload", e);
                     // Fall through to fallback method
                 }
             }
@@ -384,7 +384,7 @@ impl AudioEngine {
                 matches!(*state, PlaybackState::Playing)
             };
             
-            log::info!("🔧 SEEK FALLBACK: Reloading file from {}s position", position_seconds);
+            log::info!("SEEK FALLBACK: Reloading file from {}s position", position_seconds);
             
             // Stop current playback and clear sink properly
             {
@@ -399,7 +399,7 @@ impl AudioEngine {
                 }
                 
                 if !sink.empty() {
-                    log::warn!("🔧 SEEK FALLBACK: Sink not fully cleared after timeout");
+                    log::warn!("SEEK FALLBACK: Sink not fully cleared after timeout");
                     sink.stop();
                 }
             }
@@ -423,7 +423,7 @@ impl AudioEngine {
             }
             
             if !sink_has_content {
-                log::error!("🔧 SEEK FALLBACK: Failed to load audio content after seek");
+                log::error!("SEEK FALLBACK: Failed to load audio content after seek");
                 return Err(anyhow::anyhow!("Failed to load audio content after seek"));
             }
             
@@ -434,16 +434,16 @@ impl AudioEngine {
                     sink.play();
                     let mut state = self.state.lock().unwrap();
                     *state = PlaybackState::Playing;
-                    log::info!("🔧 SEEK FALLBACK: Resumed playback after seek");
+                    log::info!("SEEK FALLBACK: Resumed playback after seek");
                 } else {
-                    log::warn!("🔧 SEEK FALLBACK: Cannot resume - sink is still empty after loading");
+                    log::warn!("SEEK FALLBACK: Cannot resume - sink is still empty after loading");
                     let mut state = self.state.lock().unwrap();
                     *state = PlaybackState::Stopped;
                     return Err(anyhow::anyhow!("Sink empty after loading, cannot resume playback"));
                 }
             }
             
-            log::info!("🔧 SEEK FALLBACK: Successfully seeked to {}s using file reload", position_seconds);
+            log::info!("SEEK FALLBACK: Successfully seeked to {}s using file reload", position_seconds);
             Ok(())
         } else {
             Err(anyhow::anyhow!("No audio file loaded to seek in"))
@@ -452,7 +452,7 @@ impl AudioEngine {
 
     fn load_file_with_offset<P: AsRef<Path>>(&self, path: P, offset_seconds: u64) -> Result<()> {
         let path = path.as_ref();
-        log::info!("🔧 ENGINE: Loading file with {}s offset: {}", offset_seconds, path.display());
+        log::info!("ENGINE: Loading file with {}s offset: {}", offset_seconds, path.display());
 
         let file = File::open(path)
             .with_context(|| format!("Failed to open audio file: {}", path.display()))?;

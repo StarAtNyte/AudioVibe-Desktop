@@ -53,7 +53,7 @@ impl DownloadManager {
     }
     
     pub async fn download_and_extract_zip(&self, url: &str) -> Result<DownloadResult> {
-        println!("📥 DOWNLOAD: Starting download from: {}", url);
+        println!("DOWNLOAD: Starting download from: {}", url);
         
         // Generate cache filename from URL
         let filename = self.generate_cache_filename(url);
@@ -62,7 +62,7 @@ impl DownloadManager {
         
         // Check if already cached and extracted
         if extract_dir.exists() {
-            println!("💾 CACHE: Using cached extraction at: {}", extract_dir.display());
+            println!("CACHE: Using cached extraction at: {}", extract_dir.display());
             let extracted_files = self.list_audio_files(&extract_dir)?;
             return Ok(DownloadResult {
                 local_path: extract_dir,
@@ -74,13 +74,13 @@ impl DownloadManager {
         if !zip_path.exists() {
             self.download_file(url, &zip_path).await?;
         } else {
-            println!("💾 CACHE: Using cached zip at: {}", zip_path.display());
+            println!("CACHE: Using cached zip at: {}", zip_path.display());
         }
         
         // Extract the zip file
         let extracted_files = self.extract_zip(&zip_path, &extract_dir).await?;
         
-        println!("✅ DOWNLOAD: Successfully extracted {} audio files", extracted_files.len());
+        println!("DOWNLOAD: Successfully extracted {} audio files", extracted_files.len());
         
         Ok(DownloadResult {
             local_path: extract_dir,
@@ -89,7 +89,7 @@ impl DownloadManager {
     }
     
     async fn download_file(&self, url: &str, output_path: &Path) -> Result<()> {
-        println!("🌐 DOWNLOAD: Fetching {}", url);
+        println!("DOWNLOAD: Fetching {}", url);
         
         // Archive.org URLs need proper encoding
         let fixed_url = if url.contains("archive.org") && url.contains("formats=64KBPS MP3") {

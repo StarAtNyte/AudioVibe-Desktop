@@ -378,3 +378,274 @@ pub struct CreateChapterDto {
     pub file_size: Option<i64>,
 }
 
+// ============= EBOOK MODELS =============
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Ebook {
+    pub id: String,
+    pub title: String,
+    pub author: Option<String>,
+    pub file_path: String,
+    pub file_format: String, // 'pdf' or 'epub'
+    pub cover_path: Option<String>,
+    pub total_pages: Option<i32>,
+    pub file_size: Option<i64>,
+    pub language: Option<String>,
+    pub publisher: Option<String>,
+    pub publication_date: Option<String>,
+    pub description: Option<String>,
+    pub genre: Option<String>,
+    pub added_date: String,
+    pub modified_date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl Ebook {
+    pub fn new(title: String, file_path: String, file_format: String) -> Self {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        Self {
+            id,
+            title,
+            author: None,
+            file_path,
+            file_format,
+            cover_path: None,
+            total_pages: None,
+            file_size: None,
+            language: None,
+            publisher: None,
+            publication_date: None,
+            description: None,
+            genre: None,
+            added_date: now.clone(),
+            modified_date: now.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct ReadingProgress {
+    pub id: String,
+    pub ebook_id: String,
+    pub current_page: Option<i32>,
+    pub current_cfi: Option<String>,
+    pub current_chapter_href: Option<String>,
+    pub percentage_complete: f64,
+    pub reading_time_seconds: i64,
+    pub last_read_date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl ReadingProgress {
+    pub fn new(ebook_id: String) -> Self {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        Self {
+            id,
+            ebook_id,
+            current_page: None,
+            current_cfi: None,
+            current_chapter_href: None,
+            percentage_complete: 0.0,
+            reading_time_seconds: 0,
+            last_read_date: now.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EbookBookmark {
+    pub id: String,
+    pub ebook_id: String,
+    pub page_number: Option<i32>,
+    pub cfi: Option<String>,
+    pub chapter_title: Option<String>,
+    pub note: Option<String>,
+    pub created_date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl EbookBookmark {
+    pub fn new(ebook_id: String) -> Self {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        Self {
+            id,
+            ebook_id,
+            page_number: None,
+            cfi: None,
+            chapter_title: None,
+            note: None,
+            created_date: now.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EbookAnnotation {
+    pub id: String,
+    pub ebook_id: String,
+    pub annotation_type: String, // 'highlight', 'underline', 'note'
+    pub color: Option<String>,
+    pub cfi_range: Option<String>,
+    pub position_data: Option<String>,
+    pub selected_text: Option<String>,
+    pub note: Option<String>,
+    pub created_date: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl EbookAnnotation {
+    pub fn new(ebook_id: String, annotation_type: String) -> Self {
+        let id = Uuid::new_v4().to_string();
+        let now = Utc::now().to_rfc3339();
+
+        Self {
+            id,
+            ebook_id,
+            annotation_type,
+            color: None,
+            cfi_range: None,
+            position_data: None,
+            selected_text: None,
+            note: None,
+            created_date: now.clone(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct EbookReaderSettings {
+    pub ebook_id: String,
+    pub font_family: String,
+    pub font_size: i32,
+    pub line_height: f64,
+    pub letter_spacing: f64,
+    pub text_align: String,
+    pub theme: String,
+    pub background_color: Option<String>,
+    pub text_color: Option<String>,
+    pub flow_mode: String,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl EbookReaderSettings {
+    pub fn new(ebook_id: String) -> Self {
+        let now = Utc::now().to_rfc3339();
+
+        Self {
+            ebook_id,
+            font_family: "serif".to_string(),
+            font_size: 18,
+            line_height: 1.6,
+            letter_spacing: 0.0,
+            text_align: "left".to_string(),
+            theme: "light".to_string(),
+            background_color: None,
+            text_color: None,
+            flow_mode: "paginated".to_string(),
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
+}
+
+// Ebook DTOs
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateEbookDto {
+    pub title: String,
+    pub file_path: String,
+    pub file_format: String,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub genre: Option<String>,
+    pub language: Option<String>,
+    pub publisher: Option<String>,
+    pub publication_date: Option<String>,
+    pub total_pages: Option<i32>,
+    pub file_size: Option<i64>,
+    pub cover_path: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateEbookDto {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub description: Option<String>,
+    pub genre: Option<String>,
+    pub cover_path: Option<String>,
+    pub publisher: Option<String>,
+    pub publication_date: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateReadingProgressDto {
+    pub current_page: Option<i32>,
+    pub current_cfi: Option<String>,
+    pub current_chapter_href: Option<String>,
+    pub percentage_complete: Option<f64>,
+    pub reading_time_seconds: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateBookmarkDto {
+    pub ebook_id: String,
+    pub page_number: Option<i32>,
+    pub cfi: Option<String>,
+    pub chapter_title: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateAnnotationDto {
+    pub ebook_id: String,
+    pub annotation_type: String,
+    pub color: Option<String>,
+    pub cfi_range: Option<String>,
+    pub position_data: Option<String>,
+    pub selected_text: Option<String>,
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateReaderSettingsDto {
+    pub font_family: Option<String>,
+    pub font_size: Option<i32>,
+    pub line_height: Option<f64>,
+    pub letter_spacing: Option<f64>,
+    pub text_align: Option<String>,
+    pub theme: Option<String>,
+    pub background_color: Option<String>,
+    pub text_color: Option<String>,
+    pub flow_mode: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EbookMetadata {
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub publisher: Option<String>,
+    pub language: Option<String>,
+    pub publication_date: Option<String>,
+    pub total_pages: Option<i32>,
+    pub cover_image: Option<String>, // base64 encoded
+    pub description: Option<String>,
+}
+

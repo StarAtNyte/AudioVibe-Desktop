@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Clock, Play, Pause, MoreVertical, Trash2, Mic, Edit } from 'lucide-react';
 import { useCollectionStore, useLibraryStore } from '../../store';
 import { BookCover } from '../common/BookCover';
@@ -87,53 +88,38 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
 
   const handleMoreClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     if (!showContextMenu && buttonRef.current) {
-      // Calculate optimal menu position
+      // Calculate optimal menu position using fixed positioning
       const buttonRect = buttonRef.current.getBoundingClientRect();
       const windowHeight = window.innerHeight;
       const windowWidth = window.innerWidth;
-      const menuHeight = 200; // Approximate menu height
-      const menuWidth = 192; // w-48 = 12rem = 192px
-      
+      const menuHeight = 180; // Approximate menu height (compact)
+      const menuWidth = 160; // w-40 = 10rem = 160px (compact)
+
       let position: {top?: string, bottom?: string, left?: string, right?: string} = {};
-      
+
       // Vertical positioning
-      if (buttonRect.bottom + menuHeight > windowHeight - 50) {
+      if (buttonRect.bottom + menuHeight > windowHeight - 20) {
         // Open upward
-        position.bottom = '100%';
+        position.bottom = `${windowHeight - buttonRect.top + 8}px`;
       } else {
-        // Open downward  
-        position.top = '100%';
+        // Open downward
+        position.top = `${buttonRect.bottom + 8}px`;
       }
-      
-      // Horizontal positioning - check if menu would go off the left edge
-      const menuLeftEdge = buttonRect.right - menuWidth;
-      const safetyMargin = 280; // Account for sidebar width + some padding
-      
-      console.log('Menu positioning:', {
-        buttonRight: buttonRect.right,
-        menuWidth,
-        menuLeftEdge,
-        safetyMargin,
-        willFitLeft: menuLeftEdge >= safetyMargin
-      });
-      
-      if (menuLeftEdge < safetyMargin) {
-        // Too close to left edge/sidebar, open to the right of the button
-        position.left = '0';
-        position.right = undefined;
-        console.log('Opening menu to the RIGHT');
+
+      // Horizontal positioning
+      if (buttonRect.right - menuWidth < 20) {
+        // Align to left edge of button
+        position.left = `${buttonRect.left}px`;
       } else {
-        // Normal case, open to the left (align right edge with button)
-        position.right = '0';
-        position.left = undefined;
-        console.log('Opening menu to the LEFT');
+        // Align to right edge of button
+        position.left = `${buttonRect.right - menuWidth}px`;
       }
-      
+
       setMenuPosition(position);
     }
-    
+
     setShowContextMenu(!showContextMenu);
   };
 
@@ -168,7 +154,7 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
       if (window.confirm(`Are you sure you want to delete "${title}" from your library?\n\nThis action cannot be undone.`)) {
         try {
           deleteAudiobook(id).then(() => {
-            console.log(`✅ Successfully deleted audiobook: ${title}`);
+            console.log(`Successfully deleted audiobook: ${title}`);
           }).catch((error) => {
             console.error('Failed to delete audiobook:', error);
             alert(`Failed to delete "${title}". Please try again.`);
@@ -218,13 +204,12 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
   if (viewMode === 'list') {
     return (
       <>
-        <div 
-          className={`flex items-center p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-gray-200 dark:border-gray-700 ${isDragging ? 'opacity-50' : ''} ${showContextMenu ? 'relative z-[100]' : ''}`}
+        <div
+          className={`flex items-center p-4 bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-gray-200 dark:border-gray-700 ${isDragging ? 'opacity-50' : ''}`}
           onClick={handleCardClick}
           draggable
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
-          style={{ overflow: showContextMenu ? 'visible' : 'hidden' }}
         >
         <div className="relative flex-shrink-0 w-16 h-16 mr-4">
           <BookCover 
@@ -250,9 +235,7 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
               onClick={handleCheckboxClick}
             >
               {isSelected && (
-                <div className="w-2.5 h-2.5 bg-blue-500 rounded-sm flex items-center justify-center">
-                  <span className="text-white text-xs font-bold">✓</span>
-                </div>
+                <div className="w-2.5 h-2.5 bg-blue-500 rounded-sm"></div>
               )}
             </div>
           )}
@@ -299,59 +282,54 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
               <MoreVertical size={14} />
             </button>
             
-            {showContextMenu && (
-              <div 
+            {showContextMenu && createPortal(
+              <div
                 ref={contextMenuRef}
-                className="absolute w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[9999]"
-                style={{ 
-                  ...menuPosition, 
-                  marginTop: menuPosition.top ? '4px' : undefined, 
-                  marginBottom: menuPosition.bottom ? '4px' : undefined,
-                  marginLeft: menuPosition.left ? '4px' : undefined,
-                  marginRight: menuPosition.right ? '4px' : undefined
-                }}
+                className="fixed w-40 bg-white dark:bg-gray-800 rounded-md shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-[9999]"
+                style={menuPosition}
               >
-                <div className="px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                <div className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
                   Add to Collection
                 </div>
                 {collections.length === 0 ? (
-                  <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                    No collections available
+                  <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
+                    No collections
                   </div>
                 ) : (
                   collections.map(collection => (
                     <button
                       key={collection.id}
                       onClick={() => handleAddToCollection(collection.id)}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                      className="w-full text-left px-2 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
                     >
-                      <div 
-                        className="w-3 h-3 rounded-full" 
+                      <div
+                        className="w-2 h-2 rounded-full"
                         style={{ backgroundColor: collection.color }}
                       />
-                      <span>{collection.name}</span>
+                      <span className="truncate">{collection.name}</span>
                     </button>
                   ))
                 )}
 
                 {/* Edit & Delete Section */}
-                <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
+                <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
                   <button
                     onClick={handleEdit}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
+                    className="w-full text-left px-2 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
                   >
-                    <Edit size={14} />
-                    <span>Edit Details</span>
+                    <Edit size={12} />
+                    <span>Edit</span>
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-2"
+                    className="w-full text-left px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-1.5"
                   >
-                    <Trash2 size={14} />
-                    <span>Delete from Library</span>
+                    <Trash2 size={12} />
+                    <span>Delete</span>
                   </button>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </div>
         </div>
@@ -369,158 +347,162 @@ export const AudiobookCard: React.FC<AudiobookCardProps> = ({
   }
 
   return (
-    <>
-      <div 
-        className={`bg-white dark:bg-gray-800 rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer border border-gray-200 dark:border-gray-700 group ${isDragging ? 'opacity-50' : ''} ${showContextMenu ? 'relative z-[100]' : ''}`}
+    <div className="relative">
+      <div
+        className={`group bg-white dark:bg-gray-800 rounded-lg overflow-hidden cursor-pointer transition-all shadow-sm hover:shadow-lg border border-gray-200 dark:border-gray-700 ${isDragging ? 'opacity-50' : ''}`}
         onClick={handleCardClick}
         draggable
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
-        style={{ overflow: showContextMenu ? 'visible' : 'hidden' }}
       >
-      <div className="relative aspect-square">
-        <BookCover 
-          bookId={id}
-          title={title}
-          coverUrl={coverUrl}
-          className="w-full h-full object-cover"
-          fallbackClassName="w-full h-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center"
-        />
-        
-        {/* TTS Generated Badge */}
-        {isTTSGenerated && (
-          <div className="absolute top-2 left-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded-md text-xs font-medium flex items-center space-x-1 shadow-md">
-            <Mic size={10} />
-            <span>TTS</span>
-          </div>
-        )}
-        
-        {/* Selection checkbox */}
-        {isSelectionMode && (
-          <div 
-            className={`absolute w-6 h-6 rounded bg-white/90 border-2 border-gray-300 flex items-center justify-center cursor-pointer transition-colors hover:bg-white ${
-              isTTSGenerated ? 'top-2 right-12' : 'top-2 left-2'
-            }`}
-            onClick={handleCheckboxClick}
-          >
-            {isSelected && (
-              <div className="w-3 h-3 bg-blue-500 rounded-sm flex items-center justify-center">
-                <span className="text-white text-xs font-bold">✓</span>
-              </div>
-            )}
-          </div>
-        )}
-        
-        {progress > 0 && (
-          <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200 dark:bg-gray-600">
-            <div 
-              className="h-full bg-blue-500 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-        )}
+        <div className="relative aspect-square">
+          <BookCover
+            bookId={id}
+            title={title}
+            coverUrl={coverUrl}
+            className="w-full h-full object-cover"
+            fallbackClassName="w-full h-full bg-gradient-to-br from-blue-400 to-purple-600 flex items-center justify-center"
+          />
 
-        <button
-          onClick={handlePlayPause}
-          className="absolute top-2 right-2 w-10 h-10 flex items-center justify-center rounded-full bg-green-500/90 backdrop-blur-sm hover:bg-green-500 text-white transition-all duration-200 opacity-0 group-hover:opacity-100 hover:scale-105 shadow-lg"
-        >
-          {isPlaying ? <Pause size={16} /> : <Play size={16} className="ml-0.5" />}
-        </button>
-      </div>
-
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-900 dark:text-white text-sm mb-1 truncate">
-          {title}
-        </h3>
-        <p className="text-gray-600 dark:text-gray-300 text-xs mb-2 truncate">
-          {author}
-        </p>
-        
-        <div className="flex items-center justify-between">
-          {duration && (
-            <div className="flex items-center text-gray-500 dark:text-gray-400 text-xs">
-              <Clock size={12} className="mr-1" />
-              {formatDuration(duration)}
+          {/* TTS Generated Badge */}
+          {isTTSGenerated && (
+            <div className="absolute top-2 left-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-2 py-1 rounded text-xs font-medium flex items-center space-x-1 shadow-md">
+              <Mic size={10} />
+              <span>TTS</span>
             </div>
           )}
-          {!duration && <div></div>} {/* Spacer when no duration */}
-          
-          <div className="relative">
-            <button 
-              ref={buttonRef}
-              onClick={handleMoreClick}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
-              title="More options"
-            >
-              <MoreVertical size={14} />
-            </button>
-              
-              {showContextMenu && (
-                <div 
-                  ref={contextMenuRef}
-                  className="absolute w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 z-[9999]"
-                  style={{ 
-                    ...menuPosition, 
-                    marginTop: menuPosition.top ? '4px' : undefined, 
-                    marginBottom: menuPosition.bottom ? '4px' : undefined,
-                    marginLeft: menuPosition.left ? '4px' : undefined,
-                    marginRight: menuPosition.right ? '4px' : undefined
-                  }}
-                >
-                  <div className="px-3 py-2 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
-                    Add to Collection
-                  </div>
-                  {collections.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                      No collections available
-                    </div>
-                  ) : (
-                    collections.map(collection => (
-                      <button
-                        key={collection.id}
-                        onClick={() => handleAddToCollection(collection.id)}
-                        className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
-                      >
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: collection.color }}
-                        />
-                        <span>{collection.name}</span>
-                      </button>
-                    ))
-                  )}
 
-                  {/* Edit & Delete Section */}
-                  <div className="border-t border-gray-200 dark:border-gray-700 mt-2 pt-2">
-                    <button
-                      onClick={handleEdit}
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-2"
-                    >
-                      <Edit size={14} />
-                      <span>Edit Details</span>
-                    </button>
-                    <button
-                      onClick={handleDelete}
-                      className="w-full text-left px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-2"
-                    >
-                      <Trash2 size={14} />
-                      <span>Delete from Library</span>
-                    </button>
-                  </div>
-                </div>
+          {/* Selection checkbox */}
+          {isSelectionMode && (
+            <div
+              className={`absolute w-6 h-6 rounded bg-white/90 border-2 border-gray-300 flex items-center justify-center cursor-pointer transition-colors hover:bg-white ${
+                isTTSGenerated ? 'top-2 right-12' : 'top-2 left-2'
+              }`}
+              onClick={handleCheckboxClick}
+            >
+              {isSelected && (
+                <div className="w-3 h-3 bg-blue-500 rounded-sm"></div>
               )}
             </div>
+          )}
+
+          {/* Progress bar */}
+          {progress > 0 && (
+            <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-200/50">
+              <div
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
+
+          {/* Hover overlay with play button */}
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+            <button
+              onClick={handlePlayPause}
+              className="p-3 bg-white/90 rounded-full hover:bg-white transition-colors"
+              aria-label={isPlaying ? "Pause audiobook" : "Play audiobook"}
+            >
+              {isPlaying ? <Pause className="w-6 h-6 text-gray-900" /> : <Play className="w-6 h-6 text-gray-900 ml-0.5" />}
+            </button>
           </div>
+
+          {/* More options button */}
+          <div className="absolute top-2 right-2">
+            <button
+              ref={buttonRef}
+              onClick={handleMoreClick}
+              className="p-1.5 bg-black/60 hover:bg-black/80 backdrop-blur-sm rounded-full transition-colors opacity-0 group-hover:opacity-100"
+              aria-label="More options"
+            >
+              <MoreVertical className="w-4 h-4 text-white" />
+            </button>
+          </div>
+        </div>
+
+        <div className="p-3">
+          <h3 className="font-semibold text-gray-900 dark:text-white truncate" title={title}>
+            {title}
+          </h3>
+          {author && (
+            <p className="text-sm text-gray-600 dark:text-gray-400 truncate mt-1" title={author}>
+              {author}
+            </p>
+          )}
+          <div className="flex items-center gap-2 mt-2">
+            {duration && (
+              <span className="text-xs text-gray-500 dark:text-gray-500 flex items-center gap-1">
+                <Clock size={12} />
+                {formatDuration(duration)}
+              </span>
+            )}
+            {progress > 0 && (
+              <span className="text-xs text-blue-600 dark:text-blue-400">
+                {Math.round(progress)}%
+              </span>
+            )}
+          </div>
+        </div>
       </div>
+
+      {/* Context menu rendered via portal */}
+      {showContextMenu && createPortal(
+        <div
+          ref={contextMenuRef}
+          className="fixed w-40 bg-white dark:bg-gray-800 rounded-md shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-[9999]"
+          style={menuPosition}
+        >
+          <div className="px-2 py-1 text-xs font-medium text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+            Add to Collection
+          </div>
+          {collections.length === 0 ? (
+            <div className="px-2 py-1 text-xs text-gray-500 dark:text-gray-400">
+              No collections
+            </div>
+          ) : (
+            collections.map(collection => (
+              <button
+                key={collection.id}
+                onClick={() => handleAddToCollection(collection.id)}
+                className="w-full text-left px-2 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
+              >
+                <div
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: collection.color }}
+                />
+                <span className="truncate">{collection.name}</span>
+              </button>
+            ))
+          )}
+
+          {/* Edit & Delete Section */}
+          <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
+            <button
+              onClick={handleEdit}
+              className="w-full text-left px-2 py-1 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center space-x-1.5"
+            >
+              <Edit size={12} />
+              <span>Edit</span>
+            </button>
+            <button
+              onClick={handleDelete}
+              className="w-full text-left px-2 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center space-x-1.5"
+            >
+              <Trash2 size={12} />
+              <span>Delete</span>
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Backdrop for menu */}
+      {showContextMenu && (
+        <div
+          className="fixed inset-0 z-[90]"
+          onClick={() => setShowContextMenu(false)}
+        />
+      )}
     </div>
-    
-    {/* Backdrop for menu */}
-    {showContextMenu && (
-      <div 
-        className="fixed inset-0 z-[90]" 
-        onClick={() => setShowContextMenu(false)}
-      />
-    )}
-  </>
   );
 };

@@ -8,10 +8,11 @@ import {
   ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { useAppStore } from '../store';
+import { useOnboardingStore } from '../store/onboarding';
 import clsx from 'clsx';
 
 export const Settings: React.FC = () => {
-  const { 
+  const {
     theme, setTheme,
     defaultVolume, setDefaultVolume,
     defaultPlaybackSpeed, setDefaultPlaybackSpeed,
@@ -25,7 +26,9 @@ export const Settings: React.FC = () => {
     sendCrashReports, setSendCrashReports,
     clearAppData
   } = useAppStore();
-  
+
+  const { resetOnboarding } = useOnboardingStore();
+
   const [isClearing, setIsClearing] = useState(false);
 
   const themeOptions = [
@@ -319,29 +322,48 @@ export const Settings: React.FC = () => {
               </label>
             </div>
 
-            <div className="pt-4 border-t border-gray-200 dark:border-dark-600">
-              <button 
-                className="btn-secondary"
-                onClick={async () => {
-                  if (window.confirm('Are you sure you want to clear all app data? This cannot be undone.')) {
-                    setIsClearing(true);
-                    try {
-                      await clearAppData();
-                      alert('App data cleared successfully.');
-                    } catch (error) {
-                      alert('Failed to clear app data: ' + (error as Error).message);
-                    } finally {
-                      setIsClearing(false);
+            <div className="pt-4 border-t border-gray-200 dark:border-dark-600 space-y-3">
+              <div>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={() => {
+                    if (window.confirm('Are you sure you want to reset the onboarding tour? You will see the genre selection screen again on the home page.')) {
+                      resetOnboarding();
+                      alert('Onboarding reset successfully. Navigate to the home page to see the genre selection.');
                     }
-                  }
-                }}
-                disabled={isClearing}
-              >
-                {isClearing ? 'Clearing...' : 'Clear App Data'}
-              </button>
-              <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                This will reset all settings and clear your library. Your audio files will not be deleted.
-              </p>
+                  }}
+                >
+                  Reset Onboarding Tour
+                </button>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  This will show the genre selection screen again and clear your selected genres.
+                </p>
+              </div>
+
+              <div>
+                <button
+                  className="btn-secondary w-full"
+                  onClick={async () => {
+                    if (window.confirm('Are you sure you want to clear all app data? This cannot be undone.')) {
+                      setIsClearing(true);
+                      try {
+                        await clearAppData();
+                        alert('App data cleared successfully.');
+                      } catch (error) {
+                        alert('Failed to clear app data: ' + (error as Error).message);
+                      } finally {
+                        setIsClearing(false);
+                      }
+                    }
+                  }}
+                  disabled={isClearing}
+                >
+                  {isClearing ? 'Clearing...' : 'Clear App Data'}
+                </button>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  This will reset all settings and clear your library. Your audio files will not be deleted.
+                </p>
+              </div>
             </div>
           </div>
         </div>

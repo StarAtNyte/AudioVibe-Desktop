@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Grid, List, Search, Plus, SortAsc, SortDesc, Filter, Trash2, X, CheckSquare, Square, FileText } from 'lucide-react';
+import { Grid, List, Search, Plus, SortAsc, SortDesc, Filter, Trash2, X, CheckSquare, Square, FileText, Music } from 'lucide-react';
 import { AudiobookCard } from './AudiobookCard';
 import { DocumentImportModal } from './index';
 
@@ -184,108 +184,113 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
   const SortButton: React.FC<{ field: SortField; children: React.ReactNode }> = ({ field, children }) => (
     <button
       onClick={() => handleSort(field)}
-      className={`flex items-center space-x-1 px-3 py-1 rounded text-sm transition-colors ${
-        sortField === field 
-          ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
-          : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+      className={`flex items-center space-x-1 px-2.5 py-1 rounded-lg text-xs transition-all ${
+        sortField === field
+          ? 'bg-blue-500/20 border border-blue-500/50 text-blue-400'
+          : 'border border-transparent text-gray-500 hover:text-gray-400 hover:bg-gray-800/30'
       }`}
     >
       <span>{children}</span>
       {sortField === field && (
-        sortOrder === 'asc' ? <SortAsc size={14} /> : <SortDesc size={14} />
+        sortOrder === 'asc' ? <SortAsc size={12} /> : <SortDesc size={12} />
       )}
     </button>
   );
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Library</h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            {filteredAndSortedAudiobooks.length} audiobook{filteredAndSortedAudiobooks.length !== 1 ? 's' : ''}
-          </p>
+    <div className="flex flex-col h-full bg-gradient-to-br from-gray-50 via-gray-50 to-purple-50/30 dark:from-gray-950 dark:via-gray-900 dark:to-purple-950/20">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between px-6 py-4 bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 border-b border-gray-700/50">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-purple-500/10 rounded-lg">
+            <Music className="w-5 h-5 text-purple-400" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-white">My Audiobooks</h1>
+            <p className="text-xs text-gray-400">
+              {filteredAndSortedAudiobooks.length} {filteredAndSortedAudiobooks.length !== 1 ? 'audiobooks' : 'audiobook'}
+            </p>
+          </div>
         </div>
-        
-        <div className="flex items-center space-x-3">
+
+        <div className="flex items-center space-x-2">
           {filteredAndSortedAudiobooks.length > 0 && (
             <button
               onClick={handleToggleSelectionMode}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
+              className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all text-sm ${
                 isSelectionMode
-                  ? 'bg-red-500 hover:bg-red-600 text-white'
-                  : 'bg-gray-500 hover:bg-gray-600 text-white'
+                  ? 'bg-red-500/20 border border-red-500/50 text-red-400 hover:bg-red-500/30'
+                  : 'bg-gray-700/50 border border-gray-600/50 text-gray-300 hover:bg-gray-700'
               }`}
             >
-              {isSelectionMode ? <X size={16} /> : <CheckSquare size={16} />}
+              {isSelectionMode ? <X size={14} /> : <CheckSquare size={14} />}
               <span>{isSelectionMode ? 'Cancel' : 'Select'}</span>
             </button>
           )}
           <button
             onClick={() => setShowImportModal(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-600 text-white rounded-lg transition-all shadow-lg shadow-green-500/20 text-sm"
           >
-            <FileText size={16} />
+            <FileText size={14} />
             <span>Import Document</span>
           </button>
           <button
             onClick={onAddAudiobook}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
+            className="flex items-center space-x-2 px-3 py-2 bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-500 hover:to-purple-600 text-white rounded-lg transition-all shadow-lg shadow-purple-500/20 text-sm"
           >
-            <Plus size={16} />
+            <Plus size={14} />
             <span>Add Audiobook</span>
           </button>
         </div>
       </div>
 
       {/* Search and Controls */}
-      <div className="flex items-center justify-between p-6 bg-gray-50 dark:bg-gray-800/50">
+      <div className="flex items-center justify-between px-6 py-3 bg-gray-900/40 dark:bg-gray-900/60 backdrop-blur-sm border-b border-gray-700/30">
         <div className="flex items-center space-x-4 flex-1">
           {/* Simple Library Search */}
           <div className="relative flex-1 max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Search size={14} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
             <input
               type="text"
               placeholder="Search your library..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-700/50 rounded-lg bg-gray-800/50 text-white placeholder-gray-500 focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all"
             />
           </div>
 
           {/* Filter Toggle */}
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-colors ${
+            className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all text-sm ${
               showFilters || genreFilter || authorFilter
-                ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400'
+                ? 'bg-purple-500/20 border border-purple-500/50 text-purple-400'
+                : 'bg-gray-800/50 border border-gray-700/50 text-gray-400 hover:bg-gray-800 hover:text-gray-300'
             }`}
           >
-            <Filter size={16} />
+            <Filter size={14} />
             <span>Filters</span>
           </button>
 
           {/* Bulk Actions */}
           {isSelectionMode && (
-            <div className="flex items-center space-x-3 ml-4 pl-4 border-l border-gray-300 dark:border-gray-600">
+            <div className="flex items-center space-x-2 ml-4 pl-4 border-l border-gray-700/50">
               <button
                 onClick={handleSelectAll}
-                className="flex items-center space-x-2 px-3 py-2 text-sm bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 rounded-lg transition-colors"
+                className="flex items-center space-x-2 px-3 py-2 text-sm bg-purple-500/20 border border-purple-500/50 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-all"
               >
-                {selectedBooks.size === filteredAndSortedAudiobooks.length ? <Square size={16} /> : <CheckSquare size={16} />}
+                {selectedBooks.size === filteredAndSortedAudiobooks.length ? <Square size={14} /> : <CheckSquare size={14} />}
                 <span>
                   {selectedBooks.size === filteredAndSortedAudiobooks.length ? 'Deselect All' : 'Select All'}
                 </span>
               </button>
-              
+
               {selectedBooks.size > 0 && (
                 <button
                   onClick={handleBulkDelete}
-                  className="flex items-center space-x-2 px-3 py-2 text-sm bg-red-100 hover:bg-red-200 dark:bg-red-900 dark:hover:bg-red-800 text-red-700 dark:text-red-300 rounded-lg transition-colors"
+                  className="flex items-center space-x-2 px-3 py-2 text-sm bg-red-500/20 border border-red-500/50 hover:bg-red-500/30 text-red-400 rounded-lg transition-all"
                 >
-                  <Trash2 size={16} />
+                  <Trash2 size={14} />
                   <span>Delete ({selectedBooks.size})</span>
                 </button>
               )}
@@ -294,36 +299,36 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         </div>
 
         {/* View Mode Toggle */}
-        <div className="flex items-center space-x-2 ml-4">
-          <div className="flex bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-            <button
-              onClick={() => setViewMode('grid')}
-              className={`p-2 rounded ${
-                viewMode === 'grid'
-                  ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              <Grid size={16} />
-            </button>
-            <button
-              onClick={() => setViewMode('list')}
-              className={`p-2 rounded ${
-                viewMode === 'list'
-                  ? 'bg-white dark:bg-gray-600 shadow-sm text-gray-900 dark:text-white'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-              }`}
-            >
-              <List size={16} />
-            </button>
-          </div>
+        <div className="flex items-center bg-gray-800/50 rounded-lg p-1 border border-gray-700/50">
+          <button
+            onClick={() => setViewMode('grid')}
+            className={`p-1.5 rounded transition-all ${
+              viewMode === 'grid'
+                ? 'bg-purple-600 text-white shadow-lg'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+            title="Grid view"
+          >
+            <Grid size={16} />
+          </button>
+          <button
+            onClick={() => setViewMode('list')}
+            className={`p-1.5 rounded transition-all ${
+              viewMode === 'list'
+                ? 'bg-purple-600 text-white shadow-lg'
+                : 'text-gray-400 hover:text-gray-300'
+            }`}
+            title="List view"
+          >
+            <List size={16} />
+          </button>
         </div>
       </div>
 
       {/* Selection Status */}
       {isSelectionMode && selectedBooks.size > 0 && (
-        <div className="px-6 py-3 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
-          <p className="text-sm text-blue-700 dark:text-blue-300">
+        <div className="px-6 py-2 bg-purple-500/10 border-b border-purple-500/20">
+          <p className="text-sm text-purple-400">
             {selectedBooks.size} of {filteredAndSortedAudiobooks.length} audiobooks selected
           </p>
         </div>
@@ -331,43 +336,43 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
 
       {/* Filters Panel */}
       {showFilters && (
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-800/50 border-b border-gray-200 dark:border-gray-700">
+        <div className="px-6 py-3 bg-gray-900/40 dark:bg-gray-900/60 backdrop-blur-sm border-b border-gray-700/30">
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Author:</label>
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-400">Author:</label>
               <select
                 value={authorFilter}
                 onChange={(e) => setAuthorFilter(e.target.value)}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                className="px-3 py-1.5 text-sm border border-gray-700/50 rounded-lg bg-gray-800/50 text-white focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
               >
-                <option value="">All Authors</option>
+                <option value="">All</option>
                 {authors.map(author => (
                   <option key={author} value={author}>{author}</option>
                 ))}
               </select>
             </div>
-            
-            <div className="flex items-center space-x-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Genre:</label>
+
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-medium text-gray-400">Genre:</label>
               <select
                 value={genreFilter}
                 onChange={(e) => setGenreFilter(e.target.value)}
-                className="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                className="px-3 py-1.5 text-sm border border-gray-700/50 rounded-lg bg-gray-800/50 text-white focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50"
               >
-                <option value="">All Genres</option>
+                <option value="">All</option>
                 {genres.map(genre => (
                   <option key={genre} value={genre}>{genre}</option>
                 ))}
               </select>
             </div>
-            
+
             {(genreFilter || authorFilter) && (
               <button
                 onClick={() => {
                   setGenreFilter('');
                   setAuthorFilter('');
                 }}
-                className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+                className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
               >
                 Clear Filters
               </button>
@@ -377,9 +382,9 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       )}
 
       {/* Sort Controls */}
-      <div className="px-6 py-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <div className="px-6 py-2 bg-gray-900/30 dark:bg-gray-900/50 backdrop-blur-sm border-b border-gray-700/20">
         <div className="flex items-center space-x-2">
-          <span className="text-sm text-gray-600 dark:text-gray-400">Sort by:</span>
+          <span className="text-xs text-gray-500">Sort:</span>
           <SortButton field="title">Title</SortButton>
           <SortButton field="author">Author</SortButton>
           <SortButton field="duration">Duration</SortButton>
@@ -389,7 +394,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-6 m-4 bg-white/5 dark:bg-black/20 rounded-2xl backdrop-blur-sm border border-gray-700/30">
         {filteredAndSortedAudiobooks.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500 dark:text-gray-400">
             <div className="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mb-4">
@@ -403,7 +408,7 @@ export const LibraryView: React.FC<LibraryViewProps> = ({
         ) : (
           <div className={
             viewMode === 'grid'
-              ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6'
+              ? 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6'
               : 'space-y-3'
           }>
             {filteredAndSortedAudiobooks.map(audiobook => (

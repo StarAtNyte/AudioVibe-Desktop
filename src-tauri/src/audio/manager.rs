@@ -45,7 +45,7 @@ impl AudioManager {
 
     /// Load and play a single track immediately, clearing any queue
     pub fn play_track_immediately(&self, track: Track) -> Result<()> {
-        log::info!("🎵 MANAGER: Loading track immediately: {}", track.file_path);
+        log::info!("MANAGER: Loading track immediately: {}", track.file_path);
         
         // Load the new track (this will automatically stop previous audio)
         self.engine.load_file(&track.file_path)?;
@@ -62,13 +62,13 @@ impl AudioManager {
             queue.clear();
         }
         
-        log::info!("🎵 MANAGER: Track loaded successfully, ready to play");
+        log::info!("MANAGER: Track loaded successfully, ready to play");
         Ok(())
     }
 
     /// Play the currently loaded track
     pub fn play(&self) -> Result<()> {
-        log::info!("🎵 MANAGER: Starting playback");
+        log::info!("MANAGER: Starting playback");
 
         // Try to play - no automatic reload on failure
         // Reloading resets timing state which causes position to get stuck at 0:00
@@ -77,19 +77,19 @@ impl AudioManager {
 
     /// Pause the current track
     pub fn pause(&self) {
-        log::info!("🎵 MANAGER: Pausing playback");
+        log::info!("MANAGER: Pausing playback");
         self.engine.pause();
     }
 
     /// Stop the current track
     pub fn stop(&self) {
-        log::info!("🎵 MANAGER: Stopping playback");
+        log::info!("MANAGER: Stopping playback");
         self.engine.stop();
     }
 
     /// Add a track to the end of the queue
     pub fn add_to_queue(&self, track: Track) {
-        log::info!("🎵 MANAGER: Adding track to queue: {}", track.file_path);
+        log::info!("MANAGER: Adding track to queue: {}", track.file_path);
         let mut queue = self.queue.lock().unwrap();
         queue.push_back(track);
     }
@@ -97,7 +97,7 @@ impl AudioManager {
     /// Add multiple tracks to the queue
     #[allow(dead_code)]
     pub fn add_tracks_to_queue(&self, tracks: Vec<Track>) {
-        log::info!("🎵 MANAGER: Adding {} tracks to queue", tracks.len());
+        log::info!("MANAGER: Adding {} tracks to queue", tracks.len());
         let mut queue = self.queue.lock().unwrap();
         for track in tracks {
             queue.push_back(track);
@@ -112,11 +112,11 @@ impl AudioManager {
         };
 
         if let Some(track) = next_track {
-            log::info!("🎵 MANAGER: Playing next track from queue: {}", track.file_path);
+            log::info!("MANAGER: Playing next track from queue: {}", track.file_path);
             self.play_track_immediately(track)?;
             Ok(true)
         } else {
-            log::info!("🎵 MANAGER: No more tracks in queue");
+            log::info!("MANAGER: No more tracks in queue");
             Ok(false)
         }
     }
@@ -150,33 +150,33 @@ impl AudioManager {
 
     /// Clear the queue
     pub fn clear_queue(&self) {
-        log::info!("🎵 MANAGER: Clearing queue");
+        log::info!("MANAGER: Clearing queue");
         let mut queue = self.queue.lock().unwrap();
         queue.clear();
     }
 
     /// Seek to a position in the current track
     pub fn seek(&self, position_seconds: f32) -> Result<()> {
-        log::info!("🎵 MANAGER: Seeking to position: {}", position_seconds);
+        log::info!("MANAGER: Seeking to position: {}", position_seconds);
         self.engine.seek(position_seconds)
     }
 
     /// Set volume (0.0 to 1.0)
     pub fn set_volume(&self, volume: f32) {
-        log::info!("🎵 MANAGER: Setting volume to: {}", volume);
+        log::info!("MANAGER: Setting volume to: {}", volume);
         self.engine.set_volume(volume);
     }
 
     /// Set playback speed
     pub fn set_speed(&self, speed: f32) {
-        log::info!("🎵 MANAGER: Setting speed to: {}", speed);
+        log::info!("MANAGER: Setting speed to: {}", speed);
         self.engine.set_speed(speed);
     }
 
     /// Set repeat mode
     #[allow(dead_code)]
     pub fn set_repeat_mode(&self, mode: RepeatMode) {
-        log::info!("🎵 MANAGER: Setting repeat mode to: {:?}", mode);
+        log::info!("MANAGER: Setting repeat mode to: {:?}", mode);
         let mut repeat = self.repeat_mode.lock().unwrap();
         *repeat = mode;
     }
@@ -184,7 +184,7 @@ impl AudioManager {
     /// Toggle shuffle
     #[allow(dead_code)]
     pub fn set_shuffle(&self, enabled: bool) {
-        log::info!("🎵 MANAGER: Setting shuffle to: {}", enabled);
+        log::info!("MANAGER: Setting shuffle to: {}", enabled);
         let mut shuffle = self.shuffle_enabled.lock().unwrap();
         *shuffle = enabled;
     }

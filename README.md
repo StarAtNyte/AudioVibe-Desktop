@@ -3,11 +3,11 @@
 
 https://youtu.be/f0MmAFeqGqI
 
-AudioVibe is a cross-platform desktop application for playing and managing audiobooks. Built with Rust and Tauri for optimal performance, it provides a modern interface for organizing audiobook libraries and playing content from local files and online sources.
+AudioVibe is a cross-platform desktop application for playing and managing audiobooks and reading ebooks. Built with Rust and Tauri for optimal performance, it provides a modern interface for organizing audiobook libraries, reading ebooks, and playing content from local files and online sources.
 
 ## 🎯 Project Overview
 
-AudioVibe Desktop is a comprehensive audiobook management and playback solution featuring local library management, text-to-speech generation, and integration with free audiobook sources like LibriVox.
+AudioVibe Desktop is a comprehensive audiobook management and playback solution featuring local library management, ebook reader with multi-window support, text-to-speech generation, and integration with free audiobook sources like LibriVox.
 
 ## Technology Stack
 
@@ -18,6 +18,7 @@ AudioVibe Desktop is a comprehensive audiobook management and playback solution 
 - **Testing**: Vitest + React Testing Library
 - **Database**: SQLite with SQLx
 - **Audio Engine**: Rodio + Symphonia
+- **Ebook Rendering**: ePub.js for EPUB, PDF.js for PDF
 
 ## Development Setup
 
@@ -56,6 +57,10 @@ AudioVibe Desktop is a comprehensive audiobook management and playback solution 
 audiovibe-desktop/
 ├── src/                    # React frontend source
 │   ├── components/         # React components
+│   │   ├── ebooks/         # Ebook library components
+│   │   ├── reader/         # EPUB/PDF reader components
+│   │   ├── library/        # Audiobook library components
+│   │   └── player/         # Audio player components
 │   ├── data/               # Static data
 │   ├── pages/              # Application pages
 │   ├── services/           # API services
@@ -67,14 +72,32 @@ audiovibe-desktop/
 │   │   ├── audio/          # Audio engine module
 │   │   ├── database/       # Database operations
 │   │   ├── download/       # Download management
+│   │   ├── ebook/          # Ebook processing module
 │   │   ├── filesystem/     # File operations
 │   │   ├── models/         # Data models
 │   │   └── services/       # External services
+│   ├── capabilities/       # Tauri window capabilities
 │   └── Cargo.toml          # Rust dependencies
 └── package.json            # Node.js dependencies
 ```
 
 ## Current Features
+
+### Ebook Reader
+- 📖 **Multi-format Support**: Read EPUB and PDF files
+- 🪟 **Multi-window**: Open multiple books simultaneously in separate windows
+- 🎨 **Reading Modes**:
+  - Paginated and scrolled reading modes
+  - Single page and two-page spread layouts
+  - Dark, light, and sepia themes
+- ⚙️ **Customization**:
+  - Adjustable font size
+  - Auto-hiding controls (Readest-style)
+  - Table of contents navigation
+  - Progress bar with page numbers
+- 📑 **Reading Progress**: Track current page and total pages
+- ⌨️ **Keyboard Navigation**: Arrow keys for page turning
+- 🖱️ **Window Controls**: Custom minimize, maximize, and close buttons
 
 ### Audio Playback
 - 🎵 Audio playback with WAV, MP3 format support
@@ -84,6 +107,7 @@ audiovibe-desktop/
 
 ### Library Management
 - 📚 Local audiobook library with SQLite database
+- 📕 Ebook library with metadata storage
 - 📁 File system scanning for audiobook directories
 - 📋 Metadata display (title, author, duration)
 - 🗂️ Collections for organizing audiobooks
@@ -92,6 +116,7 @@ audiovibe-desktop/
 - 🔍 LibriVox browser for free public domain audiobooks
 - 📁 Local file import from directories
 - 📄 Document import (text files)
+- 📚 EPUB and PDF import for ebooks
 
 ### Text-to-Speech
 - 🤖 TTS audiobook generation from text documents
@@ -103,6 +128,7 @@ audiovibe-desktop/
 - 📱 Responsive design
 - 🌙 Basic theming support
 - 🔍 Search functionality
+- 🪟 Multi-window support for reading multiple books
 
 ### Technical Implementation
 This project showcases modern desktop application development:
@@ -134,22 +160,40 @@ This project showcases modern desktop application development:
 ### Usage
 
 1. **Adding Audiobooks**: Use the "+" button to import local audiobook folders
-2. **TTS Generation**: Import text documents and convert them to audiobooks
-3. **LibriVox Browse**: Explore free public domain audiobooks
-4. **Playback**: Click any audiobook to start listening with chapter navigation
+2. **Reading Ebooks**: Import EPUB/PDF files and open them in separate reader windows
+3. **TTS Generation**: Import text documents and convert them to audiobooks
+4. **LibriVox Browse**: Explore free public domain audiobooks
+5. **Playback**: Click any audiobook to start listening with chapter navigation
+
+### Ebook Reader Features
+
+The integrated ebook reader provides a Readest-inspired reading experience:
+
+- **Multi-window Support**: Each ebook opens in its own window, allowing you to browse your library while reading
+- **Reading Customization**:
+  - Switch between paginated and scrolled modes
+  - Toggle between single-page and two-page spread layouts
+  - Choose from dark, light, and sepia themes
+  - Adjust font size for comfortable reading
+- **Navigation**: Use arrow keys or click to turn pages, access table of contents
+- **Auto-hiding Interface**: Controls fade away while reading and appear on mouse movement
+- **Progress Tracking**: Visual progress bar with current page and total page count
 
 ## 🔧 Architecture
 
 ### Backend (Rust/Tauri)
 - **Audio Engine**: Built with Rodio for cross-platform audio playback
-- **Database**: SQLite with SQLx for audiobook metadata and progress tracking
+- **Database**: SQLite with SQLx for audiobook and ebook metadata and progress tracking
 - **File System**: Handles local file scanning and organization
 - **TTS Integration**: Text-to-speech processing for document conversion
+- **Ebook Processing**: EPUB and PDF metadata extraction and file handling
 
 ### Frontend (React/TypeScript)
-- **State Management**: Zustand for audio and library state
+- **State Management**: Zustand for audio, library, and reader state
 - **UI Components**: Modern component architecture with Tailwind CSS
 - **Audio Controls**: Real-time playback controls and progress tracking
+- **Ebook Reader**: ePub.js and PDF.js integration for ebook rendering
+- **Multi-window**: Tauri WebviewWindow API for separate reader windows
 - **Responsive Design**: Optimized for desktop usage
 
 ## 💡 Key Technical Features
@@ -160,11 +204,19 @@ This project showcases modern desktop application development:
 - Chapter-based navigation and progress tracking
 - Cross-platform audio engine optimization
 
+### Ebook Reader Integration
+- **ePub.js**: Full-featured EPUB rendering with reflowable content
+- **PDF.js**: Native PDF viewing capabilities
+- **Multi-window Architecture**: Tauri WebviewWindow for isolated reader instances
+- **Reading Customization**: Theme switching, layout modes, font size control
+- **Auto-hiding UI**: Mouse-movement based control visibility with smooth transitions
+- **Progress Persistence**: CFI-based location tracking for EPUB files
+
 ### Database Integration
 - SQLite database with comprehensive schema design
-- Efficient metadata storage and retrieval
+- Efficient metadata storage and retrieval for audiobooks and ebooks
 - Progress tracking and bookmark management
-- Optimized queries for large audiobook collections
+- Optimized queries for large audiobook and ebook collections
 
 ## 📋 Development Commands
 

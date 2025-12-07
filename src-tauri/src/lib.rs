@@ -5,6 +5,7 @@ mod filesystem;
 mod services;
 mod download;
 mod document;
+mod ebook;
 
 use models::{AppConfig, SystemInfo};
 use database::{DatabaseManager, models::*, repository::*};
@@ -70,14 +71,14 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
     let (sender, receiver) = mpsc::channel::<AudioCommand>();
     
     thread::spawn(move || {
-        println!("🎵 THREAD: Starting dedicated audio thread");
+        println!("THREAD: Starting dedicated audio thread");
         let audio_manager = match AudioManager::new() {
             Ok(manager) => {
-                println!("🎵 THREAD: Audio manager created successfully");
+                println!("THREAD: Audio manager created successfully");
                 manager
             }
             Err(e) => {
-                eprintln!("❌ THREAD: Failed to create audio manager: {}", e);
+                eprintln!("THREAD: Failed to create audio manager: {}", e);
                 return;
             }
         };
@@ -88,7 +89,7 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
             let panic_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 match command {
                     AudioCommand::LoadFile { file_path, response } => {
-                        println!("🎵 THREAD: Loading file: {}", file_path);
+                        println!("THREAD: Loading file: {}", file_path);
                         // Stop any existing audio first
                         audio_manager.stop();
 
@@ -99,53 +100,45 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
                             duration: None,
                         };
 
-                        // Load the track and play it immediately as a single atomic operation
-                        let result = match audio_manager.play_track_immediately(track) {
-                            Ok(_) => {
-                                // Add a small delay to ensure loading is complete
-                                std::thread::sleep(std::time::Duration::from_millis(10));
-                                audio_manager.play().map_err(|e| {
-                                    eprintln!("❌ THREAD: Failed to play after loading: {}", e);
-                                    e.to_string()
-                                })
-                            }
-                            Err(e) => {
-                                eprintln!("❌ THREAD: Failed to load track: {}", e);
-                                Err(e.to_string())
-                            }
-                        };
+                        // Just load the track, don't play it automatically
+                        // The frontend will call play() separately when ready
+                        let result = audio_manager.play_track_immediately(track)
+                            .map_err(|e| {
+                                eprintln!("THREAD: Failed to load track: {}", e);
+                                e.to_string()
+                            });
 
                         if let Err(send_err) = response.send(result) {
-                            eprintln!("❌ THREAD: Failed to send response: {:?}", send_err);
+                            eprintln!("THREAD: Failed to send response: {:?}", send_err);
                         }
                     }
                     AudioCommand::Play { response } => {
-                        println!("🎵 THREAD: Playing");
+                        println!("THREAD: Playing");
                         let result = audio_manager.play().map_err(|e| e.to_string());
                         let _ = response.send(result);
                     }
                     AudioCommand::Pause { response } => {
-                        println!("🎵 THREAD: Pausing");
+                        println!("THREAD: Pausing");
                         audio_manager.pause();
                         let _ = response.send(Ok(()));
                     }
                     AudioCommand::Stop { response } => {
-                        println!("🎵 THREAD: Stopping");
+                        println!("THREAD: Stopping");
                         audio_manager.stop();
                         let _ = response.send(Ok(()));
                     }
                     AudioCommand::SetVolume { volume, response } => {
-                        println!("🎵 THREAD: Setting volume: {}", volume);
+                        println!("THREAD: Setting volume: {}", volume);
                         audio_manager.set_volume(volume);
                         let _ = response.send(Ok(()));
                     }
                     AudioCommand::SetSpeed { speed, response } => {
-                        println!("🎵 THREAD: Setting speed: {}", speed);
+                        println!("THREAD: Setting speed: {}", speed);
                         audio_manager.set_speed(speed);
                         let _ = response.send(Ok(()));
                     }
                     AudioCommand::Seek { position, response } => {
-                        println!("🎵 THREAD: Seeking to: {}", position);
+                        println!("THREAD: Seeking to: {}", position);
                         let result = audio_manager.seek(position).map_err(|e| e.to_string());
                         let _ = response.send(result);
                     }
@@ -154,17 +147,17 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
                         let _ = response.send(status);
                     }
                     AudioCommand::AddToQueue { track, response } => {
-                        println!("🎵 THREAD: Adding to queue: {}", track.file_path);
+                        println!("THREAD: Adding to queue: {}", track.file_path);
                         audio_manager.add_to_queue(track);
                         let _ = response.send(Ok(()));
                     }
                     AudioCommand::PlayNext { response } => {
-                        println!("🎵 THREAD: Playing next");
+                        println!("THREAD: Playing next");
                         let result = audio_manager.play_next().map_err(|e| e.to_string());
                         let _ = response.send(result);
                     }
                     AudioCommand::ClearQueue { response } => {
-                        println!("🎵 THREAD: Clearing queue");
+                        println!("THREAD: Clearing queue");
                         audio_manager.clear_queue();
                         let _ = response.send(Ok(()));
                     }
@@ -176,13 +169,13 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
             }));
 
             if let Err(panic_err) = panic_result {
-                eprintln!("❌ THREAD: Audio thread panic caught and recovered: {:?}", panic_err);
+                eprintln!("THREAD: Audio thread panic caught and recovered: {:?}", panic_err);
                 // Thread continues running despite the panic
                 // The command's response channel may have been consumed in the panic,
                 // but future commands will still work
             }
         }
-        println!("🎵 THREAD: Audio thread ending");
+        println!("THREAD: Audio thread ending");
     });
     
     sender
@@ -191,7 +184,7 @@ fn init_audio_thread() -> mpsc::Sender<AudioCommand> {
 // Get the audio sender, initializing if necessary
 fn get_audio_sender() -> &'static mpsc::Sender<AudioCommand> {
     AUDIO_SENDER.get_or_init(|| {
-        println!("🎵 INIT: Initializing audio thread");
+        println!("INIT: Initializing audio thread");
         init_audio_thread()
     })
 }
@@ -201,13 +194,13 @@ fn get_audio_sender() -> &'static mpsc::Sender<AudioCommand> {
 async fn initialize_app(state: State<'_, AppState>) -> Result<AppConfig, String> {
     // Initialize logging with proper level
     if env_logger::try_init().is_ok() {
-        println!("🚀 Logger initialized successfully");
+        println!("Logger initialized successfully");
     }
     
-    println!("🚀 INITIALIZING AUDIOVIBE APPLICATION");
+    println!("INITIALIZING AUDIOVIBE APPLICATION");
     log::info!("Initializing AudioVibe application");
 
-    println!("🚀 AUDIO: Using simplified single manager approach");
+    println!("AUDIO: Using simplified single manager approach");
 
     // Initialize database
     let app_data_dir = std::env::current_dir()
@@ -236,7 +229,7 @@ async fn initialize_app(state: State<'_, AppState>) -> Result<AppConfig, String>
     let mut download_state = state.download_manager.lock().unwrap();
     *download_state = Some(download_manager);
     
-    println!("✅ Download manager initialized successfully");
+    println!("Download manager initialized successfully");
     log::info!("Download manager initialized successfully");
 
     Ok(AppConfig {
@@ -413,19 +406,19 @@ async fn get_playback_progress(
 // Audio control commands
 #[tauri::command]
 async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Result<(), String> {
-    println!("🎵 LOAD: Loading and playing audio file: {}", file_path);
-    log::info!("🎵 LOAD: Loading audio file: {}", file_path);
+    println!("LOAD: Loading and playing audio file: {}", file_path);
+    log::info!("LOAD: Loading audio file: {}", file_path);
     
     // First, verify the path exists
     let path_exists = std::path::Path::new(&file_path).exists();
     let is_file = std::path::Path::new(&file_path).is_file();
     let is_dir = std::path::Path::new(&file_path).is_dir();
     
-    println!("🎵 LOAD: Path analysis - exists: {}, is_file: {}, is_dir: {}", path_exists, is_file, is_dir);
+    println!("LOAD: Path analysis - exists: {}, is_file: {}, is_dir: {}", path_exists, is_file, is_dir);
     
     if !path_exists {
         let error_msg = format!("File or directory does not exist: {}", file_path);
-        println!("❌ LOAD: {}", error_msg);
+        println!("LOAD: {}", error_msg);
         return Err(error_msg);
     }
     
@@ -445,7 +438,7 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
         // Download and extract the LibriVox ZIP file
         match download_manager.download_and_extract_zip(&file_path).await {
             Ok(result) => {
-                println!("✅ LIBRIVOX: Download completed. Found {} audio files", result.extracted_files.len());
+                println!("LIBRIVOX: Download completed. Found {} audio files", result.extracted_files.len());
                 
                 if result.extracted_files.is_empty() {
                     return Err("No audio files found in the downloaded archive".to_string());
@@ -459,7 +452,7 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
                 let first_file = &files[0];
                 let local_file_path = first_file.to_string_lossy().to_string();
                 
-                println!("🎵 LIBRIVOX: Using local file: {}", local_file_path);
+                println!("LIBRIVOX: Using local file: {}", local_file_path);
                 
                 // Now load the local file using the standard audio system
                 let sender = get_audio_sender();
@@ -474,7 +467,7 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
                     .map_err(|e| format!("Failed to receive response: {}", e))?
             }
             Err(e) => {
-                println!("❌ LIBRIVOX: Download failed: {}", e);
+                println!("LIBRIVOX: Download failed: {}", e);
                 Err(format!("Failed to download LibriVox content: {}", e))
             }
         }
@@ -507,7 +500,7 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
                 }
             }
             Err(e) => {
-                println!("❌ LIBRIVOX LOCAL: Failed to read directory '{}': {}", file_path, e);
+                println!("LIBRIVOX LOCAL: Failed to read directory '{}': {}", file_path, e);
                 return Err(format!("Failed to read LibriVox directory '{}': {}", file_path, e));
             }
         }
@@ -527,14 +520,14 @@ async fn load_audio_file(state: State<'_, AppState>, file_path: String) -> Resul
         audio_files.sort();
         
         if audio_files.is_empty() {
-            println!("❌ LIBRIVOX LOCAL: No audio files found in directory: {}", file_path);
+            println!("LIBRIVOX LOCAL: No audio files found in directory: {}", file_path);
             return Err(format!("No audio files found in LibriVox directory: {}", file_path));
         }
         
         // Play the first audio file
         let first_file = audio_files[0].to_string_lossy().to_string();
-        println!("🎵 LIBRIVOX LOCAL: Playing first file: {}", first_file);
-        println!("🎵 LIBRIVOX LOCAL: Found {} total audio files", audio_files.len());
+        println!("LIBRIVOX LOCAL: Playing first file: {}", first_file);
+        println!("LIBRIVOX LOCAL: Found {} total audio files", audio_files.len());
         
         // Check if we need to create chapter records for this audiobook
         // We'll do this synchronously to avoid lifetime issues
@@ -667,7 +660,7 @@ async fn seek_audio(position_seconds: f32) -> Result<(), String> {
 // Queue management commands
 #[tauri::command]
 async fn add_to_queue(file_path: String, title: Option<String>) -> Result<(), String> {
-    log::info!("🎵 QUEUE: Adding to queue: {}", file_path);
+    log::info!("QUEUE: Adding to queue: {}", file_path);
     
     let track = Track {
         id: uuid::Uuid::new_v4().to_string(),
@@ -688,7 +681,7 @@ async fn add_to_queue(file_path: String, title: Option<String>) -> Result<(), St
 
 #[tauri::command]
 async fn play_next() -> Result<bool, String> {
-    log::info!("🎵 QUEUE: Playing next track");
+    log::info!("QUEUE: Playing next track");
     
     let sender = get_audio_sender();
     let (response_sender, response_receiver) = mpsc::channel();
@@ -702,7 +695,7 @@ async fn play_next() -> Result<bool, String> {
 
 #[tauri::command]
 async fn clear_queue() -> Result<(), String> {
-    log::info!("🎵 QUEUE: Clearing queue");
+    log::info!("QUEUE: Clearing queue");
     
     let sender = get_audio_sender();
     let (response_sender, response_receiver) = mpsc::channel();
@@ -918,6 +911,79 @@ async fn read_cover_image_as_base64(image_path: String) -> Result<String, String
 }
 
 #[tauri::command]
+async fn read_file_binary(file_path: String) -> Result<Vec<u8>, String> {
+    use std::fs;
+
+    println!("Reading binary file: {}", file_path);
+
+    // Read the file as binary
+    let file_data = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+
+    println!("Successfully read {} bytes", file_data.len());
+    Ok(file_data)
+}
+
+#[tauri::command]
+async fn read_file_chunk(file_path: String, start: usize, end: usize) -> Result<Vec<u8>, String> {
+    use std::fs::File;
+    use std::io::{Read, Seek, SeekFrom};
+
+    println!("Reading file chunk: {} [{}-{}]", file_path, start, end);
+
+    let mut file = File::open(&file_path)
+        .map_err(|e| format!("Failed to open file: {}", e))?;
+
+    // Seek to start position
+    file.seek(SeekFrom::Start(start as u64))
+        .map_err(|e| format!("Failed to seek: {}", e))?;
+
+    // Read chunk
+    let chunk_size = end - start;
+    let mut buffer = vec![0u8; chunk_size];
+    file.read_exact(&mut buffer)
+        .map_err(|e| format!("Failed to read chunk: {}", e))?;
+
+    println!("Successfully read chunk of {} bytes", buffer.len());
+    Ok(buffer)
+}
+
+#[tauri::command]
+async fn get_file_metadata(file_path: String) -> Result<serde_json::Value, String> {
+    use std::fs;
+    use std::path::Path;
+
+    println!("Getting file metadata: {}", file_path);
+
+    let metadata = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to get metadata: {}", e))?;
+
+    let path = Path::new(&file_path);
+    let file_name = path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    let extension = path.extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
+
+    let mime_type = match extension {
+        "epub" => "application/epub+zip",
+        "pdf" => "application/pdf",
+        _ => "application/octet-stream",
+    };
+
+    let result = serde_json::json!({
+        "name": file_name,
+        "size": metadata.len(),
+        "mime_type": mime_type,
+    });
+
+    Ok(result)
+}
+
+#[tauri::command]
 async fn get_audio_info(file_path: String) -> Result<AudioInfo, String> {
     audio::AudioEngine::get_audio_info(&file_path).map_err(|e| e.to_string())
 }
@@ -1010,7 +1076,7 @@ async fn create_chapters_for_existing_tts_audiobook(
         let (duration, file_size) = match extract_audio_metadata(file_path) {
             Ok(info) => (info.duration.map(|d| d as i64), Some(info.file_size as i64)),
             Err(e) => {
-                println!("⚠️ TTS: Could not extract metadata for {}: {}", chapter_title, e);
+                println!("TTS: Could not extract metadata for {}: {}", chapter_title, e);
                 (None, None)
             }
         };
@@ -1027,11 +1093,11 @@ async fn create_chapters_for_existing_tts_audiobook(
         match chapter_repo.create(chapter_dto).await {
             Ok(chapter) => {
                 let duration_str = duration.map(|d| format!("{}s", d)).unwrap_or_else(|| "unknown".to_string());
-                println!("✅ TTS: Created missing chapter record: {} ({})", chapter_title, duration_str);
+                println!("TTS: Created missing chapter record: {} ({})", chapter_title, duration_str);
                 created_chapters.push(chapter);
             },
             Err(e) => {
-                println!("⚠️ TTS: Failed to create chapter record '{}': {}", chapter_title, e);
+                println!("TTS: Failed to create chapter record '{}': {}", chapter_title, e);
             }
         }
     }
@@ -1139,7 +1205,7 @@ async fn create_chapters_for_librivox_audiobook(
         let (duration, file_size) = match extract_audio_metadata(file_path) {
             Ok(info) => (info.duration.map(|d| d as i64), Some(info.file_size as i64)),
             Err(e) => {
-                println!("⚠️ LIBRIVOX: Could not extract metadata for {}: {}", file_name, e);
+                println!("LIBRIVOX: Could not extract metadata for {}: {}", file_name, e);
                 (None, None)
             }
         };
@@ -1156,11 +1222,11 @@ async fn create_chapters_for_librivox_audiobook(
         match chapter_repo.create(chapter_dto).await {
             Ok(chapter) => {
                 let duration_str = duration.map(|d| format!("{}s", d)).unwrap_or_else(|| "unknown".to_string());
-                println!("✅ LIBRIVOX: Created chapter: {} -> {} ({})", index + 1, file_name, duration_str);
+                println!("LIBRIVOX: Created chapter: {} -> {} ({})", index + 1, file_name, duration_str);
                 created_chapters.push(chapter);
             }
             Err(e) => {
-                println!("❌ LIBRIVOX: Failed to create chapter {}: {}", index + 1, e);
+                println!("LIBRIVOX: Failed to create chapter {}: {}", index + 1, e);
             }
         }
     }
@@ -1193,7 +1259,7 @@ async fn play_chapter(
     state: State<'_, AppState>,
     chapter_id: String,
 ) -> Result<Chapter, String> {
-    println!("🎵 CHAPTER: Playing chapter with ID: {}", chapter_id);
+    println!("CHAPTER: Playing chapter with ID: {}", chapter_id);
     
     // Get chapter info from database
     let pool = {
@@ -1207,7 +1273,7 @@ async fn play_chapter(
         .map_err(|e| e.to_string())?
         .ok_or("Chapter not found")?;
     
-    println!("🎵 CHAPTER: Found chapter: {} at {}", chapter.title, chapter.file_path);
+    println!("CHAPTER: Found chapter: {} at {}", chapter.title, chapter.file_path);
     
     // Stop any current audio first to prevent overlap
     let sender = get_audio_sender();
@@ -1235,7 +1301,7 @@ async fn play_chapter(
         .map_err(|e| format!("Failed to receive load response: {}", e))?
         .map_err(|e| format!("Failed to load chapter: {}", e))?;
     
-    println!("✅ CHAPTER: Successfully loaded and started playing chapter: {}", chapter.title);
+    println!("CHAPTER: Successfully loaded and started playing chapter: {}", chapter.title);
     Ok(chapter)
 }
 
@@ -1323,7 +1389,7 @@ async fn create_chapters_for_audiobook(
         .await
         .map_err(|e| format!("Failed to update audiobook chapters count: {}", e))?;
     
-    println!("✅ CHAPTERS: Created {} chapters for audiobook: {}", chapters.len(), audiobook.title);
+    println!("CHAPTERS: Created {} chapters for audiobook: {}", chapters.len(), audiobook.title);
     Ok(chapters)
 }
 
@@ -1803,7 +1869,7 @@ async fn search_librivox(params: LibriVoxSearchParams) -> Result<serde_json::Val
     
     // Try each strategy until we get results
     for (index, strategy) in search_strategies.iter().enumerate() {
-        println!("🔍 LIBRIVOX: Trying search strategy {}: {:?}", index + 1, strategy);
+        println!("LIBRIVOX: Trying search strategy {}: {:?}", index + 1, strategy);
 
         match try_librivox_search(&strategy).await {
             Ok(mut results) => {
@@ -1838,21 +1904,21 @@ async fn search_librivox(params: LibriVoxSearchParams) -> Result<serde_json::Val
                             .collect();
 
                         if !filtered_books.is_empty() {
-                            println!("🔍 LIBRIVOX: Filtered {} books down to {} matches for title '{}'",
+                            println!("LIBRIVOX: Filtered {} books down to {} matches for title '{}'",
                                 books.len(), filtered_books.len(), original_title);
                             *books = filtered_books;
                         } else {
-                            println!("⚠️ LIBRIVOX: No books matched title '{}' after filtering, keeping all {} results",
+                            println!("LIBRIVOX: No books matched title '{}' after filtering, keeping all {} results",
                                 original_title, books.len());
                         }
                     }
                 }
 
-                println!("✅ LIBRIVOX: Strategy {} succeeded", index + 1);
+                println!("LIBRIVOX: Strategy {} succeeded", index + 1);
                 return Ok(results);
             },
             Err(e) => {
-                println!("❌ LIBRIVOX: Strategy {} failed: {}", index + 1, e);
+                println!("LIBRIVOX: Strategy {} failed: {}", index + 1, e);
                 continue;
             }
         }
@@ -1900,7 +1966,7 @@ async fn try_librivox_search(params: &LibriVoxSearchParams) -> Result<serde_json
         .send()
         .await
         .map_err(|e| {
-            println!("❌ LIBRIVOX: Request failed: {}", e);
+            println!("LIBRIVOX: Request failed: {}", e);
             format!("LibriVox API request failed: {}", e)
         })?;
     
@@ -1908,7 +1974,7 @@ async fn try_librivox_search(params: &LibriVoxSearchParams) -> Result<serde_json
     
     if !response.status().is_success() {
         let error_msg = format!("LibriVox API error: {}", response.status());
-        println!("❌ LIBRIVOX: {}", error_msg);
+        println!("LIBRIVOX: {}", error_msg);
         return Err(error_msg);
     }
     
@@ -1917,7 +1983,7 @@ async fn try_librivox_search(params: &LibriVoxSearchParams) -> Result<serde_json
         .text()
         .await
         .map_err(|e| {
-            println!("❌ LIBRIVOX: Failed to get response text: {}", e);
+            println!("LIBRIVOX: Failed to get response text: {}", e);
             format!("Failed to get response text: {}", e)
         })?;
     
@@ -1927,8 +1993,8 @@ async fn try_librivox_search(params: &LibriVoxSearchParams) -> Result<serde_json
     
     let json_data: serde_json::Value = serde_json::from_str(&response_text)
         .map_err(|e| {
-            println!("❌ LIBRIVOX: Failed to parse JSON: {}", e);
-            println!("❌ LIBRIVOX: Response text: {}", response_text);
+            println!("LIBRIVOX: Failed to parse JSON: {}", e);
+            println!("LIBRIVOX: Response text: {}", response_text);
             format!("Failed to parse LibriVox response: {}", e)
         })?;
     
@@ -1982,7 +2048,7 @@ async fn load_and_play_librivox(
     // Download individual files from Archive.org
     match download_manager.download_archive_files(&identifier).await {
         Ok(result) => {
-            println!("✅ LIBRIVOX: Download completed. Found {} audio files", result.extracted_files.len());
+            println!("LIBRIVOX: Download completed. Found {} audio files", result.extracted_files.len());
             
             if result.extracted_files.is_empty() {
                 return Err("No audio files found for this audiobook".to_string());
@@ -1996,7 +2062,7 @@ async fn load_and_play_librivox(
             let first_file = &files[0];
             let file_path = first_file.to_string_lossy().to_string();
             
-            println!("🎵 LIBRIVOX: Playing first file: {}", file_path);
+            println!("LIBRIVOX: Playing first file: {}", file_path);
             
             // Send load command to audio thread
             let sender = get_audio_sender();
@@ -2013,7 +2079,7 @@ async fn load_and_play_librivox(
                 
             match load_result {
                 Ok(_) => {
-                    println!("✅ LIBRIVOX: Successfully loaded and started playing: {}", file_path);
+                    println!("LIBRIVOX: Successfully loaded and started playing: {}", file_path);
                     Ok(format!("Playing LibriVox audio: {} ({} files available)", 
                         first_file.file_name().unwrap_or_default().to_string_lossy(),
                         files.len()))
@@ -2022,7 +2088,7 @@ async fn load_and_play_librivox(
             }
         }
         Err(e) => {
-            println!("❌ LIBRIVOX: Download failed: {}", e);
+            println!("LIBRIVOX: Download failed: {}", e);
             Err(format!("Failed to download LibriVox content: {}", e))
         }
     }
@@ -2067,7 +2133,7 @@ async fn import_librivox_audiobook(
     // Download individual files from Archive.org instead of ZIP
     match download_manager.download_archive_files(&identifier).await {
         Ok(result) => {
-            println!("✅ LIBRIVOX IMPORT: Download completed. Found {} audio files", result.extracted_files.len());
+            println!("LIBRIVOX IMPORT: Download completed. Found {} audio files", result.extracted_files.len());
             
             if result.extracted_files.is_empty() {
                 return Err("No audio files found for this audiobook".to_string());
@@ -2084,7 +2150,7 @@ async fn import_librivox_audiobook(
                 .to_string_lossy()
                 .to_string();
             
-            println!("🎵 LIBRIVOX IMPORT: Storing local directory: {}", local_directory);
+            println!("LIBRIVOX IMPORT: Storing local directory: {}", local_directory);
             
             // Parse runtime to seconds
             let duration_seconds = params.runtime.as_ref()
@@ -2118,18 +2184,18 @@ async fn import_librivox_audiobook(
             
             match repository.create(dto).await {
                 Ok(audiobook) => {
-                    println!("✅ LIBRIVOX IMPORT: Successfully imported audiobook with ID: {}", audiobook.id);
+                    println!("LIBRIVOX IMPORT: Successfully imported audiobook with ID: {}", audiobook.id);
                     Ok(format!("Successfully imported '{}' with {} audio files. Ready to play immediately!", 
                         audiobook.title, files.len()))
                 },
                 Err(e) => {
-                    println!("❌ LIBRIVOX IMPORT: Database error: {}", e);
+                    println!("LIBRIVOX IMPORT: Database error: {}", e);
                     Err(format!("Failed to save audiobook to database: {}", e))
                 }
             }
         }
         Err(e) => {
-            println!("❌ LIBRIVOX IMPORT: Download failed: {}", e);
+            println!("LIBRIVOX IMPORT: Download failed: {}", e);
             Err(format!("Failed to download LibriVox content: {}", e))
         }
     }
@@ -2253,7 +2319,7 @@ async fn download_librivox_book(
     // Download individual files from Archive.org (better than ZIP for LibriVox)
     match download_manager.download_archive_files(&archive_id).await {
         Ok(result) => {
-            println!("✅ LIBRIVOX BOOK: Download completed. Found {} audio files", result.extracted_files.len());
+            println!("LIBRIVOX BOOK: Download completed. Found {} audio files", result.extracted_files.len());
             
             if result.extracted_files.is_empty() {
                 return Err("No audio files found for this audiobook".to_string());
@@ -2271,7 +2337,7 @@ async fn download_librivox_book(
             Ok(response)
         }
         Err(e) => {
-            println!("❌ LIBRIVOX BOOK: Download failed: {}", e);
+            println!("LIBRIVOX BOOK: Download failed: {}", e);
             Err(format!("Failed to download LibriVox content: {}", e))
         }
     }
@@ -2284,7 +2350,7 @@ async fn process_document(file_path: String) -> Result<ProcessedDocument, String
     let processor = DocumentProcessor::new();
     processor.process_document(&file_path)
         .map_err(|e| {
-            println!("❌ DOCUMENT: Failed to process {}: {}", file_path, e);
+            println!("DOCUMENT: Failed to process {}: {}", file_path, e);
             e.to_string()
         })
 }
@@ -2404,7 +2470,7 @@ async fn download_cover_image(cover_url: &str, identifier: &str) -> Result<Strin
     let mime_type = if extension == "png" { "image/png" } else { "image/jpeg" };
     let data_url = format!("data:{};base64,{}", mime_type, base64_data);
     
-    println!("✅ COVER: Saved cover as base64 data URL (length: {} bytes)", bytes.len());
+    println!("COVER: Saved cover as base64 data URL (length: {} bytes)", bytes.len());
     
     Ok(data_url)
 }
@@ -2438,7 +2504,7 @@ async fn save_audio_file(
         .map_err(|e| format!("Failed to save audio file: {}", e))?;
     
     let full_path = file_path.to_string_lossy().to_string();
-    println!("✅ SAVE: Successfully saved audio file: {}", full_path);
+    println!("SAVE: Successfully saved audio file: {}", full_path);
     
     Ok(full_path)
 }
@@ -2464,7 +2530,7 @@ async fn create_tts_audiobook(
     // Generate a simple cover image for TTS audiobooks
     let cover_image_path = generate_tts_cover(&title, &author, &audiobook_id).await
         .unwrap_or_else(|e| {
-            println!("⚠️ TTS: Failed to generate cover: {}", e);
+            println!("TTS: Failed to generate cover: {}", e);
             None
         });
     
@@ -2513,12 +2579,12 @@ async fn create_tts_audiobook(
         };
         
         match chapter_repo.create(chapter_dto).await {
-            Ok(_) => println!("✅ TTS: Created chapter {} record", index + 1),
-            Err(e) => println!("⚠️ TTS: Failed to create chapter {} record: {}", index + 1, e),
+            Ok(_) => println!("TTS: Created chapter {} record", index + 1),
+            Err(e) => println!("TTS: Failed to create chapter {} record: {}", index + 1, e),
         }
     }
     
-    println!("✅ TTS: Created audiobook record with ID: {}", audiobook.id);
+    println!("TTS: Created audiobook record with ID: {}", audiobook.id);
     Ok(audiobook)
 }
 
@@ -2592,7 +2658,7 @@ async fn generate_tts_cover(
     tokio::fs::write(&svg_file_path, &svg_content).await
         .map_err(|e| format!("Failed to save SVG file: {}", e))?;
     
-    println!("✅ TTS COVER: Generated cover as SVG data URL");
+    println!("TTS COVER: Generated cover as SVG data URL");
     
     Ok(Some(data_url))
 }
@@ -2620,7 +2686,7 @@ async fn update_audiobook_file_path(
         .await
         .map_err(|e| format!("Failed to update audiobook file path: {}", e))?;
     
-    println!("✅ UPDATE: Successfully updated audiobook file path");
+    println!("UPDATE: Successfully updated audiobook file path");
     Ok(())
 }
 
@@ -2677,7 +2743,7 @@ async fn update_audiobook(
         .await
         .map_err(|e| format!("Failed to update audiobook: {}", e))?;
 
-    println!("✅ UPDATE: Successfully updated audiobook");
+    println!("UPDATE: Successfully updated audiobook");
     Ok(())
 }
 
@@ -2706,8 +2772,391 @@ async fn update_chapter_file_path(
         .await
         .map_err(|e| format!("Failed to update chapter file path: {}", e))?;
     
-    println!("✅ UPDATE CHAPTER: Successfully updated chapter file path");
+    println!("UPDATE CHAPTER: Successfully updated chapter file path");
     Ok(())
+}
+
+// ============= EBOOK COMMANDS =============
+
+#[tauri::command]
+async fn extract_ebook_metadata(file_path: String) -> Result<EbookMetadata, String> {
+    println!("EBOOK: Extracting metadata from: {}", file_path);
+
+    use ebook::EbookMetadataExtractor;
+    let extractor = EbookMetadataExtractor::new();
+    extractor.extract_metadata(&file_path)
+        .map_err(|e| {
+            println!("EBOOK: Failed to extract metadata from {}: {}", file_path, e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn create_ebook(
+    state: State<'_, AppState>,
+    dto: CreateEbookDto
+) -> Result<Ebook, String> {
+    println!("EBOOK: Creating new ebook: {}", dto.title);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.create(dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to create ebook: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_all_ebooks(state: State<'_, AppState>) -> Result<Vec<Ebook>, String> {
+    println!("EBOOK: Fetching all ebooks");
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.find_all()
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to fetch ebooks: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_ebook_by_id(
+    state: State<'_, AppState>,
+    id: String
+) -> Result<Option<Ebook>, String> {
+    println!("EBOOK: Fetching ebook with id: {}", id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.find_by_id(&id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to fetch ebook: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn update_ebook(
+    state: State<'_, AppState>,
+    id: String,
+    dto: UpdateEbookDto
+) -> Result<Ebook, String> {
+    println!("EBOOK: Updating ebook: {}", id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.update(&id, dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to update ebook: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn delete_ebook(
+    state: State<'_, AppState>,
+    id: String
+) -> Result<(), String> {
+    println!("EBOOK: Deleting ebook: {}", id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.delete(&id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to delete ebook: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn search_ebooks(
+    state: State<'_, AppState>,
+    query: String
+) -> Result<Vec<Ebook>, String> {
+    println!("EBOOK: Searching ebooks with query: {}", query);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::EbookRepository;
+    let repo = EbookRepository::new(&pool);
+    repo.search(&query)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to search ebooks: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn update_reading_progress(
+    state: State<'_, AppState>,
+    ebook_id: String,
+    dto: UpdateReadingProgressDto
+) -> Result<ReadingProgress, String> {
+    println!("EBOOK: Updating reading progress for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::ReadingProgressRepository;
+    let repo = ReadingProgressRepository::new(&pool);
+    repo.upsert(&ebook_id, dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to update reading progress: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_reading_progress(
+    state: State<'_, AppState>,
+    ebook_id: String
+) -> Result<Option<ReadingProgress>, String> {
+    println!("EBOOK: Getting reading progress for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::ReadingProgressRepository;
+    let repo = ReadingProgressRepository::new(&pool);
+    repo.find_by_ebook_id(&ebook_id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to get reading progress: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn create_bookmark(
+    state: State<'_, AppState>,
+    dto: CreateBookmarkDto
+) -> Result<EbookBookmark, String> {
+    println!("EBOOK: Creating bookmark for: {}", dto.ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::BookmarkRepository;
+    let repo = BookmarkRepository::new(&pool);
+    repo.create(dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to create bookmark: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_ebook_bookmarks(
+    state: State<'_, AppState>,
+    ebook_id: String
+) -> Result<Vec<EbookBookmark>, String> {
+    println!("EBOOK: Getting bookmarks for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::BookmarkRepository;
+    let repo = BookmarkRepository::new(&pool);
+    repo.find_by_ebook_id(&ebook_id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to get bookmarks: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn delete_bookmark(
+    state: State<'_, AppState>,
+    id: String
+) -> Result<(), String> {
+    println!("EBOOK: Deleting bookmark: {}", id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::BookmarkRepository;
+    let repo = BookmarkRepository::new(&pool);
+    repo.delete(&id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to delete bookmark: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn create_annotation(
+    state: State<'_, AppState>,
+    dto: CreateAnnotationDto
+) -> Result<EbookAnnotation, String> {
+    println!("EBOOK: Creating annotation for: {}", dto.ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::AnnotationRepository;
+    let repo = AnnotationRepository::new(&pool);
+    repo.create(dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to create annotation: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_ebook_annotations(
+    state: State<'_, AppState>,
+    ebook_id: String
+) -> Result<Vec<EbookAnnotation>, String> {
+    println!("EBOOK: Getting annotations for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::AnnotationRepository;
+    let repo = AnnotationRepository::new(&pool);
+    repo.find_by_ebook_id(&ebook_id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to get annotations: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn delete_annotation(
+    state: State<'_, AppState>,
+    id: String
+) -> Result<(), String> {
+    println!("EBOOK: Deleting annotation: {}", id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::AnnotationRepository;
+    let repo = AnnotationRepository::new(&pool);
+    repo.delete(&id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to delete annotation: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn update_reader_settings(
+    state: State<'_, AppState>,
+    ebook_id: String,
+    dto: UpdateReaderSettingsDto
+) -> Result<EbookReaderSettings, String> {
+    println!("EBOOK: Updating reader settings for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::ReaderSettingsRepository;
+    let repo = ReaderSettingsRepository::new(&pool);
+    repo.upsert(&ebook_id, dto)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to update reader settings: {}", e);
+            e.to_string()
+        })
+}
+
+#[tauri::command]
+async fn get_reader_settings(
+    state: State<'_, AppState>,
+    ebook_id: String
+) -> Result<Option<EbookReaderSettings>, String> {
+    println!("EBOOK: Getting reader settings for: {}", ebook_id);
+
+    let pool = {
+        let db_state = state.db.lock().unwrap();
+        let db = db_state.as_ref().ok_or("Database not initialized")?;
+        db.get_pool().map_err(|e| e.to_string())?.clone()
+    };
+
+    use ebook::ReaderSettingsRepository;
+    let repo = ReaderSettingsRepository::new(&pool);
+    repo.find_by_ebook_id(&ebook_id)
+        .await
+        .map_err(|e| {
+            println!("EBOOK: Failed to get reader settings: {}", e);
+            e.to_string()
+        })
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -2756,6 +3205,9 @@ pub fn run() {
             import_audiobook_from_directory,
             find_cover_art,
             read_cover_image_as_base64,
+            read_file_binary,
+            read_file_chunk,
+            get_file_metadata,
             get_audiobook_chapters,
             play_chapter,
             get_chapter_by_number,
@@ -2792,7 +3244,25 @@ pub fn run() {
             update_audiobook,
             update_audiobook_file_path,
             update_chapter_file_path,
-            find_cover_art
+            find_cover_art,
+            // Ebook commands
+            extract_ebook_metadata,
+            create_ebook,
+            get_all_ebooks,
+            get_ebook_by_id,
+            update_ebook,
+            delete_ebook,
+            search_ebooks,
+            update_reading_progress,
+            get_reading_progress,
+            create_bookmark,
+            get_ebook_bookmarks,
+            delete_bookmark,
+            create_annotation,
+            get_ebook_annotations,
+            delete_annotation,
+            update_reader_settings,
+            get_reader_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -8,6 +8,7 @@ import {
   FolderIcon,
   PlusCircleIcon,
   ArrowDownTrayIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import { NavigationItem } from '../../types';
 import clsx from 'clsx';
@@ -29,6 +30,12 @@ const navigationItems: NavigationItem[] = [
     label: 'Library',
     path: '/library',
     icon: ({ className }) => <BookOpenIcon className={className} />,
+  },
+  {
+    id: 'ebooks',
+    label: 'Ebooks',
+    path: '/ebooks',
+    icon: ({ className }) => <DocumentTextIcon className={className} />,
   },
   {
     id: 'player',
